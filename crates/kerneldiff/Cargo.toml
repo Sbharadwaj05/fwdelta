@@ -1,15 +1,20 @@
 [package]
-name = "soteria-engine"
+name = "soteria-kerneldiff"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Header-space encoding, set algebra and enumeration over firewall accept sets"
+description = "Differential testing of the Soteria model against the Linux kernel"
+publish = false
+
+[[bin]]
+name = "soteria-kerneldiff"
+path = "src/main.rs"
 
 [dependencies]
-biodivine-lib-bdd = { workspace = true }
 soteria-ir = { workspace = true }
+soteria-engine = { workspace = true }
 
 [lints.rust]
 unsafe_code = "forbid"

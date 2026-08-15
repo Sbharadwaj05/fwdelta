@@ -19,8 +19,9 @@
 
 use biodivine_lib_bdd::Bdd;
 
-use crate::header::{Field, Layout};
-use crate::intervals::IntervalSet;
+use soteria_ir::{Field, IntervalSet};
+
+use crate::header::Layout;
 use crate::region::{Region, merge};
 
 /// Work limits for a single enumeration.
@@ -58,8 +59,12 @@ pub struct Enumeration {
     pub shown_packets: u128,
     /// Rectangles dropped by the display cap.
     pub omitted_regions: usize,
-    /// Packets in those dropped rectangles.
+    /// Packets in the input but not in [`Enumeration::regions`], for any reason:
+    /// display cap, cube budget, or a cube too awkward to render exactly.
     pub omitted_packets: u128,
+    /// Of the omitted packets, those in cubes that could not be rendered
+    /// exactly within `mask_expand_cap`. Diagnostic only.
+    pub unrenderable_packets: u128,
     /// Paths visited, for benchmarking.
     pub cubes_visited: usize,
     /// Rectangle count before merging, for benchmarking the merge pass.
@@ -145,7 +150,8 @@ pub fn enumerate(layout: &Layout, set: &Bdd, opts: EnumOptions) -> Enumeration {
         }
         out.cubes_visited += 1;
 
-        let mut dims: [Option<IntervalSet>; 5] = [None, None, None, None, None];
+        let mut dims: [Option<IntervalSet>; 7] =
+            [None, None, None, None, None, None, None];
         let mut cube_packets: u128 = 1;
         let mut usable = true;
 
@@ -162,7 +168,7 @@ pub fn enumerate(layout: &Layout, set: &Bdd, opts: EnumOptions) -> Enumeration {
         }
 
         if usable {
-            let d = dims.map(|d| d.expect("all five dimensions were filled"));
+            let d = dims.map(|d| d.expect("all seven dimensions were filled"));
             raw.push(Region::from_dims(d));
         } else {
             // Exact rendering of this cube would need more intervals than the
@@ -186,11 +192,19 @@ pub fn enumerate(layout: &Layout, set: &Bdd, opts: EnumOptions) -> Enumeration {
     if regions.len() > opts.max_regions {
         let dropped = regions.split_off(opts.max_regions);
         out.omitted_regions = dropped.len();
-        out.omitted_packets = dropped.iter().map(Region::count).sum();
     }
-    out.omitted_packets += skipped_packets;
+
+    // Rectangles are pairwise disjoint — cubes are root-to-one paths, which are
+    // mutually exclusive, and merging replaces a group by the exact union of its
+    // members — so the shown packets can simply be summed, and whatever is left
+    // over is what the reader is not being shown. Deriving omission this way
+    // rather than accumulating it keeps the books balanced no matter which limit
+    // stopped the walk.
     out.shown_packets = regions.iter().map(Region::count).sum();
+    out.omitted_packets = out.total_packets.saturating_sub(out.shown_packets);
+    out.unrenderable_packets = skipped_packets;
     out.regions = regions;
+    debug_assert_eq!(out.shown_packets + out.omitted_packets, out.total_packets);
     out
 }
 
@@ -215,7 +229,7 @@ fn read_field(
     (value, mask)
 }
 
-/// Exact size of the packet set. The header space is 2^104, which fits `u128`.
+/// Exact size of the packet set. The header space is 2^120, which fits `u128`.
 pub fn exact_cardinality(set: &Bdd) -> u128 {
     set.exact_cardinality().to_string().parse::<u128>().unwrap_or(u128::MAX)
 }
@@ -271,9 +285,46 @@ mod tests {
             let l = Layout::new(order);
             let e = enumerate(&l, &l.tt(), EnumOptions::default());
             assert_eq!(e.regions.len(), 1);
-            assert_eq!(e.total_packets, 1u128 << 104);
+            assert_eq!(e.total_packets, 1u128 << 120);
             assert_eq!(e.shown_packets, e.total_packets);
         }
+    }
+
+    /// The books must balance whichever limit stopped the walk. This is the
+    /// invariant the thousand-rule benchmark broke on first run.
+    #[test]
+    fn accounting_balances_when_a_budget_stops_the_walk() {
+        let l = Layout::default();
+        // A set with many root-to-one paths: an eight-way source union.
+        let mut b = l.ff();
+        for i in 0..8u64 {
+            b = b.or(&l.prefix(Field::SrcAddr, (10 + i * 17) << 24, 24));
+        }
+        b = b.and(&l.eq(Field::Proto, 6));
+
+        for max_cubes in [1usize, 2, 3, 5, 1000] {
+            let e = enumerate(&l, &b, EnumOptions { max_cubes, ..Default::default() });
+            assert_eq!(
+                e.shown_packets + e.omitted_packets,
+                e.total_packets,
+                "max_cubes {max_cubes}: books do not balance"
+            );
+            assert_eq!(e.incomplete, max_cubes < 8, "max_cubes {max_cubes}: wrong flag");
+        }
+    }
+
+    #[test]
+    fn accounting_balances_when_the_display_cap_truncates() {
+        let l = Layout::default();
+        let mut b = l.ff();
+        for i in 0..20u64 {
+            b = b.or(&l.eq(Field::DstAddr, 0x0A05_0000 | (i * 4099)).and(&l.eq(Field::DstPort, 1000 + i)));
+        }
+        let e = enumerate(&l, &b, EnumOptions { max_regions: 5, ..Default::default() });
+        assert_eq!(e.regions.len(), 5);
+        assert_eq!(e.omitted_regions, 15);
+        assert_eq!(e.shown_packets + e.omitted_packets, e.total_packets);
+        assert!(!e.incomplete, "a display cap is not an incomplete analysis");
     }
 
     #[test]

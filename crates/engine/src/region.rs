@@ -9,13 +9,14 @@ use std::collections::HashMap;
 
 use biodivine_lib_bdd::Bdd;
 
-use crate::header::{Field, Layout};
-use crate::intervals::IntervalSet;
+use soteria_ir::{Field, IntervalSet};
+
+use crate::header::Layout;
 
 /// A product of five interval sets: one rectangle of packet space.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct Region {
-    dims: [IntervalSet; 5],
+    dims: [IntervalSet; 7],
 }
 
 impl Region {
@@ -28,11 +29,13 @@ impl Region {
                 IntervalSet::full(Field::SrcPort.bits()),
                 IntervalSet::full(Field::DstPort.bits()),
                 IntervalSet::full(Field::Proto.bits()),
+                IntervalSet::full(Field::IfIn.bits()),
+                IntervalSet::full(Field::IfOut.bits()),
             ],
         }
     }
 
-    pub fn from_dims(dims: [IntervalSet; 5]) -> Self {
+    pub fn from_dims(dims: [IntervalSet; 7]) -> Self {
         Self { dims }
     }
 
@@ -99,7 +102,7 @@ pub fn merge(mut regions: Vec<Region>, max_passes: usize) -> Vec<Region> {
 
     for _ in 0..max_passes {
         let before = regions.len();
-        for d in 0..5 {
+        for d in 0..7 {
             regions = merge_along(regions, d);
         }
         if regions.len() == before {
@@ -110,18 +113,20 @@ pub fn merge(mut regions: Vec<Region>, max_passes: usize) -> Vec<Region> {
 }
 
 fn merge_along(regions: Vec<Region>, d: usize) -> Vec<Region> {
-    let mut seen: HashMap<[IntervalSet; 4], usize> = HashMap::with_capacity(regions.len());
+    let mut seen: HashMap<[IntervalSet; 6], usize> = HashMap::with_capacity(regions.len());
     let mut out: Vec<Region> = Vec::with_capacity(regions.len());
 
     for r in regions {
-        let mut key: [IntervalSet; 4] = [
+        let mut key: [IntervalSet; 6] = [
+            IntervalSet::empty(0),
+            IntervalSet::empty(0),
             IntervalSet::empty(0),
             IntervalSet::empty(0),
             IntervalSet::empty(0),
             IntervalSet::empty(0),
         ];
         let mut k = 0;
-        for i in 0..5 {
+        for i in 0..7 {
             if i != d {
                 key[k] = r.dim(i).clone();
                 k += 1;
@@ -151,7 +156,7 @@ mod tests {
 
     #[test]
     fn full_region_covers_the_whole_space() {
-        assert_eq!(Region::full().count(), 1u128 << 104);
+        assert_eq!(Region::full().count(), 1u128 << 120);
         assert_eq!(Region::full().constrained_dims(), 0);
     }
 

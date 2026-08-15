@@ -9,9 +9,8 @@
 use std::time::Instant;
 
 use biodivine_lib_bdd::Bdd;
-use soteria_engine::header::Field;
 use soteria_engine::render::{self, Style};
-use soteria_engine::{EnumOptions, Layout, VarOrder, enumerate};
+use soteria_engine::{EnumOptions, Field, Layout, SymbolTable, VarOrder, enumerate};
 
 fn ip(a: u8, b: u8, c: u8, d: u8) -> u64 {
     ((a as u64) << 24) | ((b as u64) << 16) | ((c as u64) << 8) | d as u64
@@ -52,6 +51,7 @@ impl<'a> Flow<'a> {
 }
 
 fn case(layout: &Layout, name: &str, description: &str, set: &Bdd) {
+    let syms = SymbolTable::default();
     let opts = EnumOptions::default();
     let t0 = Instant::now();
     let e = enumerate(layout, set, opts);
@@ -62,7 +62,7 @@ fn case(layout: &Layout, name: &str, description: &str, set: &Bdd) {
     println!();
     let style = Style::default();
     let rows: Vec<render::Row> =
-        e.regions.iter().map(|r| render::row(r, "was allowed by rule 14", &style)).collect();
+        e.regions.iter().map(|r| render::row(r, "was allowed by rule 14", &syms, &style)).collect();
     print!("{}", render::table(&rows, "    "));
     if e.omitted_regions > 0 {
         println!(
@@ -104,7 +104,7 @@ fn main() {
     let l = &layout;
 
     println!("SOTERIA ENUMERATOR GATE");
-    println!("104-bit IPv4 header space, variable order {:?}", l.order());
+    println!("120-bit header space, variable order {:?}", l.order());
 
     // 1. A single host and port behind a source prefix. The commonest delta of
     //    all: one service exposure changed.

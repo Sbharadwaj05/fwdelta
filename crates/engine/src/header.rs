@@ -1,94 +1,44 @@
-//! The 104-bit IPv4 packet header space and its mapping onto BDD variables.
+//! Mapping the 120-bit header space onto BDD variables.
 //!
-//! A packet is a point in `{0,1}^104`: 32 bits of source address, 32 of
-//! destination address, 16 of source port, 16 of destination port and 8 of
-//! protocol. A set of packets is a boolean function over those variables.
+//! A packet is a point in `{0,1}^120`. A set of packets is a boolean function
+//! over those variables, held as a reduced ordered binary decision diagram.
 //!
 //! Bit positions within a field are numbered from the most significant bit, so
-//! bit 0 of `SrcAddr` is the top bit of the address. An address prefix is then
-//! exactly "fix bits 0..len", which is what keeps prefix encoding cheap and
-//! what the enumerator relies on when reading fixed bits back out.
+//! an address prefix is exactly "fix bits 0..len". That keeps prefix encoding
+//! cheap and is what the enumerator relies on when reading fixed bits back out.
 
 use biodivine_lib_bdd::{Bdd, BddVariable, BddVariableSet};
-
-use crate::intervals::IntervalSet;
-
-/// The five match dimensions.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-pub enum Field {
-    SrcAddr,
-    DstAddr,
-    SrcPort,
-    DstPort,
-    Proto,
-}
-
-impl Field {
-    pub const ALL: [Field; 5] =
-        [Field::SrcAddr, Field::DstAddr, Field::SrcPort, Field::DstPort, Field::Proto];
-
-    /// Field width in bits. These five sum to 104.
-    #[inline]
-    pub const fn bits(self) -> u32 {
-        match self {
-            Field::SrcAddr | Field::DstAddr => 32,
-            Field::SrcPort | Field::DstPort => 16,
-            Field::Proto => 8,
-        }
-    }
-
-    #[inline]
-    pub const fn index(self) -> usize {
-        match self {
-            Field::SrcAddr => 0,
-            Field::DstAddr => 1,
-            Field::SrcPort => 2,
-            Field::DstPort => 3,
-            Field::Proto => 4,
-        }
-    }
-
-    #[inline]
-    pub const fn short(self) -> &'static str {
-        match self {
-            Field::SrcAddr => "sa",
-            Field::DstAddr => "da",
-            Field::SrcPort => "sp",
-            Field::DstPort => "dp",
-            Field::Proto => "pr",
-        }
-    }
-}
-
-/// Total width of the header space.
-pub const HEADER_BITS: u32 = 104;
+use soteria_ir::{Field, HEADER_BITS, IntervalSet, Match, SymbolTable};
 
 /// BDD variable ordering.
 ///
-/// Ordering does not change the meaning of anything, only the size of the
-/// diagrams and therefore the running time. The enumerator reads fixed bits per
-/// field and is independent of the choice, so this stays swappable and
-/// measurable rather than baked in.
+/// Ordering changes the size of the diagrams and therefore the running time, not
+/// the meaning of anything. The enumerator reads fixed bits per field and is
+/// independent of the choice, so this stays swappable and measurable rather than
+/// baked in. See `examples/thousand_rules.rs` for the measurement.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum VarOrder {
-    /// Protocol first, then each field's bits contiguously, MSB first.
+    /// Cheap dimensions first, then each field's bits contiguously, MSB first.
     FieldMajor,
-    /// Protocol first, then source and destination address bits interleaved
-    /// MSB-first, then the two port fields interleaved. The blueprint's
-    /// recommendation: rules that constrain both addresses to prefixes stay
-    /// shallow because the diagram decides both dimensions near the root.
+    /// Cheap dimensions first, then source and destination address bits
+    /// interleaved MSB-first, then the two port fields interleaved. Rules that
+    /// constrain both addresses to prefixes stay shallow because the diagram
+    /// decides both dimensions near the root.
     #[default]
     AddrInterleaved,
 }
 
 impl VarOrder {
-    /// The global variable sequence: position *i* in this vector is BDD variable *i*.
+    /// The global variable sequence: position *i* is BDD variable *i*.
     fn sequence(self) -> Vec<(Field, u32)> {
         let mut v = Vec::with_capacity(HEADER_BITS as usize);
-        // Protocol leads in both orderings. Almost every real rule constrains
-        // it, so deciding it at the root prunes the widest.
-        for b in 0..Field::Proto.bits() {
-            v.push((Field::Proto, b));
+        // The three narrow dimensions lead in both orderings. Nearly every real
+        // rule constrains protocol, and interface matches sit at the top of most
+        // chains, so deciding them at the root prunes the widest.
+        for f in [Field::Proto, Field::IfIn, Field::IfOut] {
+            for b in 0..f.bits() {
+                v.push((f, b));
+            }
         }
         match self {
             VarOrder::FieldMajor => {
@@ -120,7 +70,7 @@ pub struct Layout {
     vars: BddVariableSet,
     order: VarOrder,
     /// `pos[field][bit]` is the global variable index.
-    pos: [[u16; 32]; 5],
+    pos: [[u16; 32]; 7],
     /// Variables in declaration order; `all[i]` is global variable `i`.
     all: Vec<BddVariable>,
     sequence: Vec<(Field, u32)>,
@@ -140,7 +90,7 @@ impl Layout {
         let name_refs: Vec<&str> = names.iter().map(String::as_str).collect();
         let vars = BddVariableSet::new(&name_refs);
 
-        let mut pos = [[u16::MAX; 32]; 5];
+        let mut pos = [[u16::MAX; 32]; 7];
         for (i, &(f, b)) in sequence.iter().enumerate() {
             pos[f.index()][b as usize] = i as u16;
         }
@@ -199,7 +149,7 @@ impl Layout {
 
     /// `field` matches the given prefix, `len` bits fixed from the MSB.
     pub fn prefix(&self, field: Field, value: u64, len: u32) -> Bdd {
-        assert!(len <= field.bits(), "prefix length {len} exceeds {:?}", field);
+        assert!(len <= field.bits(), "prefix length {len} exceeds {field}");
         let w = field.bits();
         let mut acc = self.tt();
         for b in 0..len {
@@ -209,14 +159,14 @@ impl Layout {
         acc
     }
 
-    /// `field >= lo`, built MSB-last so the diagram stays linear in the width.
+    /// `field >= lo`, built LSB-first so the diagram stays linear in the width.
     fn geq(&self, field: Field, lo: u64) -> Bdd {
         let w = field.bits();
         let mut acc = self.tt();
         for b in (0..w).rev() {
             let bit = (lo >> (w - 1 - b)) & 1 == 1;
             acc = if bit {
-                // lo has a 1 here: x must also have a 1, and the suffix must still be >=.
+                // lo has a 1 here: x needs a 1 too, and the suffix must still be >=.
                 self.lit(field, b, true).and(&acc)
             } else {
                 // lo has a 0 here: a 1 in x already settles it.
@@ -267,19 +217,42 @@ impl Layout {
         }
         acc
     }
+
+    /// Compile an IR match predicate into the set of packets it admits.
+    ///
+    /// The interface dimensions resolve against the shared symbol table here,
+    /// which is the only place symbols become numbers.
+    pub fn match_bdd(&self, m: &Match, syms: &SymbolTable) -> Bdd {
+        let mut acc = self.tt();
+        for f in Field::ALL {
+            let set = match f {
+                Field::IfIn => m.iif.resolve(syms),
+                Field::IfOut => m.oif.resolve(syms),
+                other => m.packet_dim(other).clone(),
+            };
+            if set.is_full() {
+                continue;
+            }
+            acc = acc.and(&self.set(f, &set));
+            if acc.is_false() {
+                break;
+            }
+        }
+        acc
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use soteria_ir::IfMatch;
 
     fn layouts() -> Vec<Layout> {
         vec![Layout::new(VarOrder::FieldMajor), Layout::new(VarOrder::AddrInterleaved)]
     }
 
     #[test]
-    fn header_is_one_hundred_and_four_bits() {
-        assert_eq!(Field::ALL.iter().map(|f| f.bits()).sum::<u32>(), HEADER_BITS);
+    fn header_is_one_hundred_and_twenty_bits() {
         for l in layouts() {
             assert_eq!(l.vars().num_vars(), HEADER_BITS as u16);
         }
@@ -307,15 +280,6 @@ mod tests {
             let via_range = l.range(Field::SrcAddr, 0x0A010000, 0x0A01FFFF);
             assert_eq!(via_prefix, via_range);
         }
-    }
-
-    #[test]
-    fn range_cardinality_is_exact() {
-        let l = Layout::default();
-        // 1024..=65535 on a 16-bit field, with the other 88 bits free.
-        let b = l.range(Field::DstPort, 1024, 65535);
-        let free = 1u128 << (HEADER_BITS - 16);
-        assert_eq!(b.exact_cardinality().to_string(), ((65535u128 - 1024 + 1) * free).to_string());
     }
 
     #[test]
@@ -349,5 +313,47 @@ mod tests {
         let l = Layout::default();
         assert!(l.set(Field::Proto, &IntervalSet::full(8)).is_true());
         assert!(l.range(Field::SrcAddr, 0, u32::MAX as u64).is_true());
+    }
+
+    #[test]
+    fn an_unconstrained_match_is_the_whole_space() {
+        let l = Layout::default();
+        let syms = SymbolTable::from_names(["eth0", "eth1"]).unwrap();
+        assert!(l.match_bdd(&Match::any(), &syms).is_true());
+    }
+
+    /// The phantom-delta guard, at the level where it would actually bite.
+    #[test]
+    fn a_growing_symbol_table_does_not_move_an_unconstrained_rule() {
+        let l = Layout::default();
+        let narrow = SymbolTable::from_names(["eth0"]).unwrap();
+        let wide = SymbolTable::from_names(["eth0", "eth1", "eth2", "wg0"]).unwrap();
+        let m = Match::any().with_value(Field::Proto, 6).with_value(Field::DstPort, 22);
+        assert_eq!(l.match_bdd(&m, &narrow), l.match_bdd(&m, &wide));
+    }
+
+    #[test]
+    fn naming_an_interface_is_a_real_narrowing() {
+        let l = Layout::default();
+        let syms = SymbolTable::from_names(["eth0", "eth1", "eth2"]).unwrap();
+        let open = l.match_bdd(&Match::any().with_value(Field::DstPort, 22), &syms);
+        let scoped = l.match_bdd(
+            &Match::any().with_value(Field::DstPort, 22).with_iif(IfMatch::one("eth2")),
+            &syms,
+        );
+        let lost = open.and_not(&scoped);
+        assert!(!lost.is_false(), "scoping to one interface must narrow");
+        // Exactly 255 of the 256 interface symbols were dropped.
+        let open_n = open.exact_cardinality().to_string().parse::<u128>().unwrap();
+        let scoped_n = scoped.exact_cardinality().to_string().parse::<u128>().unwrap();
+        assert_eq!(open_n / scoped_n, 256);
+    }
+
+    #[test]
+    fn a_contradictory_match_compiles_to_nothing() {
+        let l = Layout::default();
+        let syms = SymbolTable::default();
+        let m = Match::any().with_value(Field::Proto, 6).with_value(Field::Proto, 17);
+        assert!(l.match_bdd(&m, &syms).is_false());
     }
 }

@@ -5,7 +5,7 @@ Open decisions from blueprint section 10. Each entry is either **PROPOSED**
 
 ---
 
-## D-01 Rule attribution through BDD construction — PROPOSED
+## D-01 Rule attribution through BDD construction — ACCEPTED 2026-08-15
 
 Blueprint section 10, item 5. Every finding attributes to a rule
 ("was allowed by rule 14"). Decide how rule identity survives stage 2.
@@ -54,11 +54,9 @@ rulesets keep separate partitions and the delta is intersected against each.
 
 ### What it costs
 
-- **Memory.** One retained BDD per rule. A single rule's effective set is small
-  (low hundreds of nodes), so a thousand-rule ruleset is a few hundred thousand
-  nodes. Measure at M2 against the thousand-rule benchmark; if it ever bites,
-  the fix is to drop `eff_i` for rules the delta never touches, which is a
-  cache policy and not a redesign.
+- **Memory.** One retained BDD per rule. **Measured at M2:** a thousand-rule
+  chain retains about 152,000 nodes across the match and effective sets, roughly
+  1.8 MiB. The concern was unfounded and needs no cache policy.
 - **Enumeration is per cell, not global.** Rectangles cannot merge across an
   attribution boundary, so the output has slightly more lines than a global
   merge would produce. This is the right trade: a merged line carrying two
@@ -93,7 +91,7 @@ is a free internal consistency check worth asserting in tests.
 
 ---
 
-## D-02 Interface and zone matches in the IR — PROPOSED
+## D-02 Interface and zone matches in the IR — ACCEPTED 2026-08-15
 
 Blueprint section 10, item 4: first-class match dimension, or pre-resolved into
 address sets by the frontend.
@@ -138,8 +136,13 @@ Proposal: two new fields, input and output interface, 8 bits each.
 ### What it costs
 
 - **The header is no longer 104 bits.** It becomes 120. Blueprint section 06 and
-  section 07's IPv4 note need amending. Roughly 15% more variables; the
-  enumerator is already field-driven and generalises without change.
+  section 07's IPv4 note are amended accordingly (maintainer approved, revision
+  0.1 is not scripture). **Measured at M2:** a diagram's size depends on the
+  function it represents, not on how many variables exist, so the sixteen extra
+  variables cost nothing until a rule uses them — the accept set of a
+  thousand-rule chain with no interface matches touches 88 of the 120 variables
+  and is byte-for-byte what a 104-bit layout would produce. Rulesets that do use
+  interface matches on a fifth of rules pay roughly 15% more analysis time.
 - **Two more columns** in the region type and the report.
 - **256 interface names per comparison**, which is not a real limit for one host.
 - **Grammar surface.** `iif`/`oif` match the kernel's numeric ifindex, which is
@@ -149,6 +152,25 @@ Proposal: two new fields, input and output interface, 8 bits each.
   (`iifname "eth*"`) and name sets need an explicit decision at M1 — a wildcard
   over a symbol space the tool only partially observes is a soundness question,
   not a parsing one.
+
+### Maintainer requirement: the unconstrained domain
+
+**An unconstrained interface field denotes all 256 symbol values, never only the
+named ones.** The symbol table is built from the union of both revisions, so it
+grows when the head names an interface the base never mentioned. If `Any` were
+defined relative to the table, that growth would silently widen every
+unconstrained rule on both sides and manufacture a delta out of nothing.
+
+Stated in `crates/ir/src/interface.rs` and pinned by two tests. The one that
+matters is `growing_the_table_does_not_move_an_unconstrained_match`: it grows the
+table from one name to four and requires an unconstrained match to compile to the
+identical set, which is the phantom in its purest form. Its partner,
+`naming_an_interface_narrows_against_unconstrained`, requires that naming an
+interface really does drop 255 of 256 symbols, so the first test cannot be
+satisfied by making everything trivially equal.
+
+The same requirement is asserted at the engine level by
+`a_growing_symbol_table_does_not_move_an_unconstrained_rule`.
 
 ### The alternative if 120 bits is unacceptable
 
@@ -160,7 +182,7 @@ Recommended only if the width measurably hurts at M2.
 
 ---
 
-## D-03 Parser library — PROPOSED (minor)
+## D-03 Parser library — ACCEPTED 2026-08-15
 
 Blueprint section 08 names `nom` or `chumsky`. Proposal: hand-written
 tokeniser plus recursive descent, no parser dependency.
@@ -174,3 +196,58 @@ removed is one fewer entry to justify in the `cargo-deny` allowlist.
 Cost: a few hundred more lines of first-party code to maintain and test. Reverse
 this if the supported grammar subset grows past what recursive descent stays
 readable for.
+
+**Maintainer condition:** the supported-subset table ships in the repository from
+M1. A hand-written parser without a written boundary is how grammar creep starts.
+
+---
+
+## D-04 Variable ordering — ACCEPTED 2026-08-15 (measured)
+
+Blueprint section 06 recommends interleaving source and destination address bits
+rather than grouping each field contiguously, and says it is worth measuring
+rather than assuming. Measured at M2 on a thousand-rule chain:
+
+| Ordering | accept set | analysis |
+|---|---|---|
+| field-major | 29,300 nodes | 2.6 s |
+| interleaved | 18,246 nodes | 1.7 s |
+
+The recommendation holds: interleaving is 38% smaller and 35% faster. Default is
+`VarOrder::AddrInterleaved`; field-major stays available because the enumerator
+is ordering-independent and a future workload may invert the result.
+
+Worth recording how nearly this measurement went wrong. The first run showed the
+two orderings within noise of each other — because the generated rulesets were
+built from `/8`-wide prefixes, which shadowed 808 of 1000 rules. Shadowed rules
+have empty effective sets and cost almost nothing, so the benchmark was measuring
+shadow detection rather than analysis. A benchmark that flatters every option
+equally is measuring the wrong thing.
+
+---
+
+## D-05 Analysis time at a thousand rules — OPEN
+
+**Not a decision yet; a measurement that needs one.**
+
+M2 measured `analyse` at 1.7 s for a thousand-rule chain, against the blueprint's
+sub-second target in section 03. A diff runs it twice.
+
+The phase breakdown says where it is not: compiling the thousand match
+predicates costs 131 ms. The remaining 1.6 s is the two set-algebra passes, which
+are inherently sequential — first-match needs the prefix union at every step, so
+the accumulation cannot be tree-shaped.
+
+Candidate work, in rough order of return per unit risk:
+
+1. Drop the forward `accept` accumulation entirely and take the accept set from
+   `A_0`. The two are proven equal and already asserted to be; the forward pass
+   would keep only `eff_i`. Saves one BDD union per rule, perhaps 20%.
+2. Compute `eff_i` lazily. Attribution only needs the effective sets of rules the
+   delta actually touches, which is a handful. This needs checkpointed prefix
+   unions to reconstruct `matched_{<i}` on demand, so it trades memory and
+   complexity for the larger share of the forward pass.
+3. Accept the number. A thousand-rule single-host filter table is already a large
+   input, and the delta enumeration a reviewer waits on is 50 µs.
+
+Decide before 1.0, since section 03 makes a public claim about it.

@@ -9,8 +9,8 @@
 //!   eye can scan down a column instead of reading each line.
 
 use crate::enumerate::Enumeration;
-use crate::header::Field;
-use crate::intervals::{IntervalSet, set_to_prefixes};
+use soteria_ir::{Field, IntervalSet, SymbolTable, set_to_prefixes};
+
 use crate::region::Region;
 
 /// How much detail a line is allowed to carry.
@@ -148,9 +148,45 @@ pub fn proto_set(set: &IntervalSet, style: &Style) -> String {
     style.join(terms)
 }
 
+/// Render an interface set by name. `None` means unconstrained.
+///
+/// The dimension spans all 256 symbols, of which only the names appearing in
+/// the two rulesets are known. A set covering unnamed symbols therefore cannot
+/// be listed positively and is shown as an exclusion instead, which is both
+/// shorter and the way the rule was almost certainly written.
+pub fn iface_set(set: &IntervalSet, syms: &SymbolTable, style: &Style) -> Option<String> {
+    if set.is_full() {
+        return None;
+    }
+    if set.is_empty() {
+        return Some("<none>".to_string());
+    }
+    let named = |s: &IntervalSet| -> Vec<String> {
+        s.ranges()
+            .iter()
+            .flat_map(|&(lo, hi)| lo..=hi)
+            .map(|v| match syms.name_of(v as u8) {
+                Some(n) => n.to_string(),
+                None => format!("if#{v}"),
+            })
+            .collect()
+    };
+
+    if syms.all_named(set) && set.count() <= 8 {
+        return Some(style.join(named(set)));
+    }
+    let complement = set.complement();
+    if syms.all_named(&complement) && complement.count() <= 8 {
+        return Some(format!("not {}", style.join(named(&complement))));
+    }
+    Some(format!("{} of 256 symbols", set.count()))
+}
+
 /// One rendered rectangle, split into columns before padding.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Row {
+    pub iif: String,
+    pub oif: String,
     pub proto: String,
     pub src: String,
     pub dst: String,
@@ -160,12 +196,18 @@ pub struct Row {
 
 /// Render a rectangle into columns. Source port rides with the source address,
 /// since it is constrained rarely and never deserves its own column.
-pub fn row(region: &Region, note: &str, style: &Style) -> Row {
+pub fn row(region: &Region, note: &str, syms: &SymbolTable, style: &Style) -> Row {
     let src = match port_set(region.get(Field::SrcPort), style) {
         Some(p) => format!("{}:{}", addr_set(region.get(Field::SrcAddr), style), p),
         None => addr_set(region.get(Field::SrcAddr), style),
     };
     Row {
+        iif: iface_set(region.get(Field::IfIn), syms, style)
+            .map(|s| format!("in {s}"))
+            .unwrap_or_default(),
+        oif: iface_set(region.get(Field::IfOut), syms, style)
+            .map(|s| format!("out {s}"))
+            .unwrap_or_default(),
         proto: proto_set(region.get(Field::Proto), style),
         src,
         dst: addr_set(region.get(Field::DstAddr), style),
@@ -176,19 +218,30 @@ pub fn row(region: &Region, note: &str, style: &Style) -> Row {
     }
 }
 
-/// Pad columns to content width and join.
+/// Pad columns to content width and join. Interface columns disappear entirely
+/// when no row constrains them, which is the common case.
 pub fn table(rows: &[Row], indent: &str) -> String {
-    let w_proto = rows.iter().map(|r| r.proto.len()).max().unwrap_or(0);
-    let w_src = rows.iter().map(|r| r.src.len()).max().unwrap_or(0);
-    let w_dst = rows.iter().map(|r| r.dst.len()).max().unwrap_or(0);
-    let w_dport = rows.iter().map(|r| r.dport.len()).max().unwrap_or(0);
+    let width = |f: fn(&Row) -> &String| rows.iter().map(|r| f(r).len()).max().unwrap_or(0);
+    let w_iif = width(|r| &r.iif);
+    let w_oif = width(|r| &r.oif);
+    let w_proto = width(|r| &r.proto);
+    let w_src = width(|r| &r.src);
+    let w_dst = width(|r| &r.dst);
+    let w_dport = width(|r| &r.dport);
 
     let mut out = String::new();
     for r in rows {
-        let line = format!(
-            "{indent}{:<w_proto$}  {:<w_src$} -> {:<w_dst$} {:<w_dport$}  {}",
+        let mut line = String::from(indent);
+        if w_iif > 0 {
+            line.push_str(&format!("{:<w_iif$}  ", r.iif));
+        }
+        if w_oif > 0 {
+            line.push_str(&format!("{:<w_oif$}  ", r.oif));
+        }
+        line.push_str(&format!(
+            "{:<w_proto$}  {:<w_src$} -> {:<w_dst$} {:<w_dport$}  {}",
             r.proto, r.src, r.dst, r.dport, r.note
-        );
+        ));
         out.push_str(line.trim_end());
         out.push('\n');
     }
@@ -221,13 +274,20 @@ pub fn count(n: u128) -> String {
 }
 
 /// Render a whole enumeration under a section heading.
-pub fn section(title: &str, subtitle: &str, e: &Enumeration, note: &str, style: &Style) -> String {
+pub fn section(
+    title: &str,
+    subtitle: &str,
+    e: &Enumeration,
+    note: &str,
+    syms: &SymbolTable,
+    style: &Style,
+) -> String {
     let mut out = format!("{title}  {subtitle}\n");
     if e.regions.is_empty() {
         out.push_str("  none\n");
         return out;
     }
-    let rows: Vec<Row> = e.regions.iter().map(|r| row(r, note, style)).collect();
+    let rows: Vec<Row> = e.regions.iter().map(|r| row(r, note, syms, style)).collect();
     out.push_str(&table(&rows, "  "));
     if e.omitted_regions > 0 || e.omitted_packets > 0 {
         out.push_str(&format!(

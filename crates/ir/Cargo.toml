@@ -1,15 +1,13 @@
 [package]
-name = "soteria-engine"
+name = "soteria-ir"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Header-space encoding, set algebra and enumeration over firewall accept sets"
+description = "Vendor-neutral intermediate representation for firewall rulesets"
 
 [dependencies]
-biodivine-lib-bdd = { workspace = true }
-soteria-ir = { workspace = true }
 
 [lints.rust]
 unsafe_code = "forbid"
