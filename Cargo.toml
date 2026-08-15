@@ -1,0 +1,20 @@
+[workspace]
+resolver = "3"
+members = ["crates/engine"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+authors = ["Subhash Bharadwaj C S"]
+description = "Semantic diff and formal reachability analysis for firewall policy under version control"
+
+[workspace.dependencies]
+biodivine-lib-bdd = "0.6.3"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
