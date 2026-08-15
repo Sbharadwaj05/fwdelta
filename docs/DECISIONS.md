@@ -226,28 +226,55 @@ equally is measuring the wrong thing.
 
 ---
 
-## D-05 Analysis time at a thousand rules — OPEN
+## D-05 Analysis time at a thousand rules — CLOSED 2026-08-15
 
-**Not a decision yet; a measurement that needs one.**
+**Resolution: amend the blueprint, not the code.**
 
-M2 measured `analyse` at 1.7 s for a thousand-rule chain, against the blueprint's
-sub-second target in section 03. A diff runs it twice.
+M2 measured `analyse` at 1.7 s for a thousand-rule chain, against the
+sub-second target in blueprint section 03. The target was an estimate made
+before anything was built, and it is the estimate that was wrong.
 
-The phase breakdown says where it is not: compiling the thousand match
-predicates costs 131 ms. The remaining 1.6 s is the two set-algebra passes, which
-are inherently sequential — first-match needs the prefix union at every step, so
-the accumulation cannot be tree-shaped.
+A diff is two analyses, so roughly 3.4 s. That is invisible inside CI and
+tolerable locally. The latency a human actually perceives is delta enumeration,
+which is 50 µs. Optimising a batch job nobody watches is the wrong use of
+attention. **Section 03 is amended to drop the sub-second claim**; no public
+claim should exist that the implementation does not meet.
 
-Candidate work, in rough order of return per unit risk:
+### What was done
 
-1. Drop the forward `accept` accumulation entirely and take the accept set from
-   `A_0`. The two are proven equal and already asserted to be; the forward pass
-   would keep only `eff_i`. Saves one BDD union per rule, perhaps 20%.
-2. Compute `eff_i` lazily. Attribution only needs the effective sets of rules the
-   delta actually touches, which is a handful. This needs checkpointed prefix
-   unions to reconstruct `matched_{<i}` on demand, so it trades memory and
-   complexity for the larger share of the forward pass.
-3. Accept the number. A thousand-rule single-host filter table is already a large
-   input, and the delta enumeration a reviewer waits on is 50 µs.
+Only the part that was deletion rather than restructuring: the forward pass no
+longer accumulates the accept set, because `A_0` from the backward pass is
+exactly it. One BDD union per rule removed.
 
-Decide before 1.0, since section 03 makes a public claim about it.
+The equality of the two derivations was worth more than the 340 ms, so it is
+kept as `ChainModel::forward_accept` and exercised by `ChainModel::verify`,
+which runs in the test suite, on every kernel-differential round, and under
+`--verify`. `verify_rejects_a_corrupted_model` confirms the check can fail,
+since a self-test that cannot fail is not a check.
+
+### What was rejected
+
+Lazy `eff_i`. The effective sets are needed for attribution regardless, so
+laziness buys little while complicating the structure correctness depends on.
+
+### Correction to the earlier reasoning
+
+The M2 report described the accumulation as "inherently sequential". That is
+wrong and should not stand in the record.
+
+`matched_i` is a prefix-OR over rule match sets. OR is associative, so this is a
+parallel prefix scan — Blelloch, tree-shaped, standard — not a sequential
+dependency. Given `eff_i`, the accept accumulation is a prefix-OR over a subset
+and parallelises the same way.
+
+Two real caveats keep it a candidate rather than a fix:
+
+- A tree-shaped union combines non-adjacent rules, whose intermediate diagrams
+  can be larger than the sequential order produces. Firewall rules adjacent in a
+  file tend to share structure; rules far apart do not. The win could be eaten
+  by node count.
+- `biodivine-lib-bdd` thread-safety needs checking before anyone tries it. Each
+  `Bdd` owns its nodes, which is promising, but "promising" is not "verified".
+
+Neither is a reason to call the problem unimprovable, which is what the earlier
+wording implied.

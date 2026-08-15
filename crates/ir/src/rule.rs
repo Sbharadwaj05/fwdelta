@@ -125,6 +125,26 @@ impl Match {
         self
     }
 
+    /// Remove any constraint on one packet dimension.
+    ///
+    /// The counterpart to [`Match::constrain`], which intersects and therefore
+    /// cannot widen. Anything wanting to *replace* a dimension needs this;
+    /// passing a full set to `constrain` is a no-op, which is a quiet way to
+    /// write code that does nothing.
+    pub fn relax(mut self, field: Field) -> Self {
+        let full = IntervalSet::full(field.bits());
+        match field {
+            Field::SrcAddr => self.src_addr = full,
+            Field::DstAddr => self.dst_addr = full,
+            Field::SrcPort => self.src_port = full,
+            Field::DstPort => self.dst_port = full,
+            Field::Proto => self.proto = full,
+            Field::IfIn => self.iif = IfMatch::Any,
+            Field::IfOut => self.oif = IfMatch::Any,
+        }
+        self
+    }
+
     /// Convenience for the common address-prefix constraint.
     pub fn with_prefix(self, field: Field, value: u64, len: u32) -> Self {
         let set = IntervalSet::prefix(field.bits(), value, len);
@@ -261,6 +281,26 @@ mod tests {
             .with_range(Field::DstPort, 100, 200)
             .with_range(Field::DstPort, 150, 300);
         assert_eq!(m.packet_dim(Field::DstPort).ranges(), &[(150, 200)]);
+    }
+
+    /// `constrain` intersects, so it can only narrow. Widening needs `relax`.
+    /// Passing a full set to `constrain` does nothing, which is an easy way to
+    /// write code that silently has no effect.
+    #[test]
+    fn constrain_cannot_widen_but_relax_can() {
+        let narrowed = Match::any().with_value(Field::Proto, 6);
+        let no_op = narrowed.clone().constrain(Field::Proto, &IntervalSet::full(8));
+        assert_eq!(no_op.packet_dim(Field::Proto).count(), 1, "constrain must not widen");
+
+        let widened = narrowed.relax(Field::Proto);
+        assert!(widened.packet_dim(Field::Proto).is_full());
+    }
+
+    #[test]
+    fn relax_clears_interface_matches_too() {
+        let m = Match::any().with_iif(IfMatch::one("eth0")).with_oif(IfMatch::one("eth1"));
+        assert_eq!(m.clone().relax(Field::IfIn).iif, IfMatch::Any);
+        assert_eq!(m.relax(Field::IfOut).oif, IfMatch::Any);
     }
 
     #[test]

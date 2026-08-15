@@ -168,6 +168,41 @@ impl ChainModel {
         self.rules.iter().filter(|r| r.redundant && !r.shadowed)
     }
 
+    /// Recompute the accept set the forward way, from the effective sets.
+    ///
+    /// [`analyse`] takes the accept set from the backward pass, since `A_0` is
+    /// exactly it and computing both costs a union per rule for no new
+    /// information. This is the other route to the same answer, kept because the
+    /// two recurrences are independent derivations and their agreement is a
+    /// self-test on the core of the engine.
+    pub fn forward_accept(&self, layout: &Layout) -> Bdd {
+        let mut acc = layout.ff();
+        for r in &self.rules {
+            if r.action.permits() {
+                acc = acc.or(&r.effective);
+            }
+        }
+        if self.policy.permits() {
+            acc = acc.or(&self.fallthrough);
+        }
+        acc
+    }
+
+    /// Both engine self-checks: the partition invariant, and the two
+    /// independent derivations of the accept set agreeing.
+    ///
+    /// Wired to `--verify` rather than run unconditionally, and always run in
+    /// the test suite.
+    pub fn verify(&self, layout: &Layout) -> Result<(), &'static str> {
+        if !self.partition_holds(layout) {
+            return Err("effective sets do not partition the header space");
+        }
+        if self.forward_accept(layout) != self.accept {
+            return Err("forward and backward accept sets disagree");
+        }
+        Ok(())
+    }
+
     /// Check that the effective sets really do partition the header space.
     ///
     /// Exposed rather than hidden in tests because it is cheap relative to the
@@ -193,7 +228,6 @@ pub fn analyse(layout: &Layout, syms: &SymbolTable, chain: &Chain) -> ChainModel
 
     // Forward pass: accept set, and the partition that carries attribution.
     let mut matched_any = layout.ff();
-    let mut accept = layout.ff();
     let mut saturated = false;
     for rule in &chain.rules {
         let m = layout.match_bdd(&rule.matches, syms);
@@ -202,9 +236,6 @@ pub fn analyse(layout: &Layout, syms: &SymbolTable, chain: &Chain) -> ChainModel
         // remaining effective set is empty by definition. The match set is still
         // built, because the backward pass and shadow explanations need it.
         let effective = if saturated { layout.ff() } else { m.and_not(&matched_any) };
-        if rule.action.permits() {
-            accept = accept.or(&effective);
-        }
         if !saturated {
             matched_any = matched_any.or(&m);
             saturated = matched_any.is_true();
@@ -220,12 +251,12 @@ pub fn analyse(layout: &Layout, syms: &SymbolTable, chain: &Chain) -> ChainModel
     }
 
     let fallthrough = matched_any.not();
-    if chain.policy.permits() {
-        accept = accept.or(&fallthrough);
-    }
 
-    // Backward pass: redundancy against the accept set of each suffix. Only the
-    // rolling suffix is retained, so this costs no additional storage.
+    // Backward pass: redundancy against the accept set of each suffix, and the
+    // accept set itself, since `A_0` is exactly it. Only the rolling suffix is
+    // retained, so this costs no additional storage. Accumulating the accept set
+    // forwards as well would cost a union per rule to arrive at the same answer;
+    // `ChainModel::forward_accept` does that on demand for `--verify`.
     let mut suffix = if chain.policy.permits() { layout.tt() } else { layout.ff() };
     for r in rules.iter_mut().rev() {
         r.redundant = if r.action.permits() {
@@ -239,13 +270,12 @@ pub fn analyse(layout: &Layout, syms: &SymbolTable, chain: &Chain) -> ChainModel
             r.matched.not().and(&suffix)
         };
     }
-    debug_assert_eq!(suffix, accept, "backward pass disagrees with forward pass");
 
     ChainModel {
         name: chain.name.clone(),
         hook: chain.hook,
         policy: chain.policy,
-        accept,
+        accept: suffix,
         matched_any,
         fallthrough,
         rules,
@@ -323,31 +353,46 @@ mod tests {
         assert!(analyse(&l, &s, &c).partition_holds(&l));
     }
 
+    /// The accept set comes from the backward pass. This checks it against the
+    /// forward derivation, which is an independent route to the same set.
     #[test]
-    fn the_backward_pass_agrees_with_the_forward_pass() {
+    fn the_two_derivations_of_the_accept_set_agree() {
         let (l, s) = setup();
-        // A chain with every action kind and overlapping matches.
+        for policy in [Action::Accept, Action::Drop] {
+            // A chain with every action kind and overlapping matches.
+            let c = chain_of(
+                policy,
+                vec![
+                    (Match::any().with_value(Field::DstPort, 22), Action::Accept),
+                    (Match::any().with_prefix(Field::SrcAddr, 0x0A01_0000, 16), Action::Drop),
+                    (Match::any().with_value(Field::Proto, TCP), Action::Reject),
+                    (Match::any().with_prefix(Field::DstAddr, 0x0A05_0000, 16), Action::Accept),
+                    (Match::any().with_iif(IfMatch::one("eth1")), Action::Accept),
+                ],
+            );
+            let m = analyse(&l, &s, &c);
+            assert_eq!(m.forward_accept(&l), m.accept, "policy {policy}");
+            assert_eq!(m.verify(&l), Ok(()), "policy {policy}");
+        }
+    }
+
+    /// The self-check has to be capable of failing, or it checks nothing.
+    #[test]
+    fn verify_rejects_a_corrupted_model() {
+        let (l, s) = setup();
         let c = chain_of(
-            Action::Accept,
+            Action::Drop,
             vec![
                 (Match::any().with_value(Field::DstPort, 22), Action::Accept),
-                (Match::any().with_prefix(Field::SrcAddr, 0x0A01_0000, 16), Action::Drop),
-                (Match::any().with_value(Field::Proto, TCP), Action::Reject),
-                (Match::any().with_prefix(Field::DstAddr, 0x0A05_0000, 16), Action::Accept),
+                (Match::any().with_value(Field::Proto, TCP), Action::Accept),
             ],
         );
-        let m = analyse(&l, &s, &c);
+        let mut m = analyse(&l, &s, &c);
+        assert_eq!(m.verify(&l), Ok(()));
 
-        // Recompute A_0 independently of the analyse() loop.
-        let mut suffix = l.tt();
-        for r in m.rules.iter().rev() {
-            suffix = if r.action.permits() {
-                r.matched.or(&suffix)
-            } else {
-                r.matched.not().and(&suffix)
-            };
-        }
-        assert_eq!(suffix, m.accept);
+        // Widen the accept set behind the effective sets' back.
+        m.accept = m.accept.or(&l.eq(Field::DstPort, 9999));
+        assert!(m.verify(&l).is_err());
     }
 
     #[test]

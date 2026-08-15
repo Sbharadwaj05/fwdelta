@@ -128,6 +128,12 @@ pub fn chain(table: &str, c: &Chain) -> Option<String> {
         out.push_str(&rule(r)?);
         out.push('\n');
     }
+    // Sentinel: counts packets that reached the end of the chain and are about
+    // to be decided by the policy. It carries no verdict, so it changes nothing
+    // semantically, and it makes "the policy decided this" an observable event
+    // rather than an absence. Without it, no-counter-moved is ambiguous between
+    // "policy" and "the packet has not arrived yet", and the harness cannot poll.
+    out.push_str("    counter comment \"r0\"\n");
     out.push_str("  }\n}\n");
     Some(out)
 }
