@@ -78,7 +78,7 @@ fn direction_section(
     }
 
     let (cells, truncated) = attribute(base, head, delta, opts.max_cells);
-    let mut found: Vec<(u128, Row)> = Vec::new();
+    let mut found: Vec<(u128, crate::region::Region, Row)> = Vec::new();
     let mut omitted_regions = 0usize;
     let mut omitted_packets = 0u128;
     let mut incomplete = false;
@@ -87,7 +87,9 @@ fn direction_section(
         let e = enumerate(layout, &cell.set, opts.enumeration);
         let note = dir.note(cell.was, cell.now);
         found.extend(
-            e.regions.iter().map(|r| (r.count(), render::row(r, &note, syms, &opts.style))),
+            e.regions
+                .iter()
+                .map(|r| (r.count(), r.clone(), render::row(r, &note, syms, &opts.style))),
         );
         omitted_regions += e.omitted_regions;
         omitted_packets += e.omitted_packets;
@@ -97,13 +99,25 @@ fn direction_section(
     // Order by breadth across every cell, not within each one. Sorting per cell
     // lets a narrow finding from an early rule lead while the widest change in
     // the diff sits halfway down the page.
-    found.sort_by_key(|(count, _)| std::cmp::Reverse(*count));
+    found.sort_by_key(|(count, _, _)| std::cmp::Reverse(*count));
+    let mut omitted_flows = 0u128;
     if found.len() > opts.max_rows {
         let dropped = found.split_off(opts.max_rows);
         omitted_regions += dropped.len();
-        omitted_packets += dropped.iter().map(|(n, _)| *n).sum::<u128>();
+        omitted_packets += dropped.iter().map(|(n, _, _)| *n).sum::<u128>();
+
+        // Flow counts are a projection, and projections do not add: two
+        // rectangles that differ only in source port are disjoint as packet
+        // sets and collapse to the same flow. Summing per-rectangle flow counts
+        // would therefore overstate the remainder. Rebuild the union and
+        // project that instead.
+        let mut union = layout.ff();
+        for (_, region, _) in &dropped {
+            union = union.or(&region.to_bdd(layout));
+        }
+        omitted_flows = flow_count(layout, &union);
     }
-    let mut rows: Vec<Row> = found.into_iter().map(|(_, r)| r).collect();
+    let mut rows: Vec<Row> = found.into_iter().map(|(_, _, r)| r).collect();
 
     // Anything identical on every line is a qualifier on the section, not a
     // column. Repeating `in not lo` down the page costs width and says nothing.
@@ -128,10 +142,14 @@ fn direction_section(
         render::count(flow_count(layout, delta))
     ));
     if omitted_regions > 0 {
+        // Reported in flows, matching the headline. Mixing units across two
+        // adjacent lines invites a reader to compare figures that are not
+        // comparable.
+        let _ = omitted_packets;
         out.push_str(&format!(
-            "  ... {omitted_regions} further {} omitted, covering {} packets\n",
+            "  ... {omitted_regions} further {} omitted, covering {} flows\n",
             if omitted_regions == 1 { "entry" } else { "entries" },
-            render::count(omitted_packets)
+            render::count(omitted_flows)
         ));
     }
     if truncated {

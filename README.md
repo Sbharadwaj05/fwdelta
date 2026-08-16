@@ -122,7 +122,9 @@ Every claim above has a mechanism behind it, and each runs in CI.
 crates/ir          what a rule says: seven match dimensions, 120 bits
 crates/engine      what it means: BDD encoding, accept sets, diff, enumeration
 crates/nft         the nftables frontend
+crates/cli         the `soteria` binary
 crates/kerneldiff  differential testing against the Linux kernel
+fixtures/          rulesets used by the tests, validated against real nft in CI
 docs/SEMANTICS.md         the specification the implementation is reviewed against
 docs/DECISIONS.md         architectural decisions, with the reasoning and the cost
 docs/NFTABLES-SUBSET.md   the frontend's boundary
@@ -132,9 +134,30 @@ docs/NFTABLES-SUBSET.md   the frontend's boundary
 
 ```sh
 cargo test --workspace
-cargo run --release -p soteria-engine --example delta_report
 cargo build --release --target x86_64-unknown-linux-musl
 ```
+
+Comparing two revisions:
+
+```sh
+soteria diff --base fixtures/cell-gateway-base.nft \
+             --head fixtures/cell-gateway-head.nft
+
+# or against git history, which is the CI shape
+soteria diff --base main --head HEAD --path cell-gateway.nft
+
+# machine-readable, untruncated, counts as strings so 2^120 survives
+soteria diff --base main --head HEAD --path cell-gateway.nft --format json
+
+# what is dead in a single ruleset
+soteria check cell-gateway.nft
+```
+
+Exit codes are the whole interface as far as a pipeline is concerned: `0`
+completed with no gate failed, `1` a gate failed, `2` the tool could not
+analyse the input. A ruleset outside the supported subset always exits `2` —
+a green build from a ruleset that was never modelled is the outcome this
+project exists to prevent.
 
 The differential harness needs `nftables`, `iproute2`, `socat` and unprivileged
 user namespaces. It needs no root.

@@ -157,6 +157,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "soteria-cli"
+version = "0.1.0"
+dependencies = [
+ "biodivine-lib-bdd",
+ "soteria-engine",
+ "soteria-ir",
+ "soteria-nft",
+]
+
+[[package]]
 name = "soteria-engine"
 version = "0.1.0"
 dependencies = [

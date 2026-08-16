@@ -1,0 +1,24 @@
+[package]
+name = "soteria-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Semantic diff and formal reachability analysis for firewall policy"
+
+[[bin]]
+name = "soteria"
+path = "src/main.rs"
+
+[dependencies]
+soteria-ir = { workspace = true }
+soteria-engine = { workspace = true }
+soteria-nft = { workspace = true }
+biodivine-lib-bdd = { workspace = true }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

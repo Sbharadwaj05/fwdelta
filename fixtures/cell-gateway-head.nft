@@ -1,0 +1,21 @@
+# Cell gateway. Segments the enterprise VLAN from the OT cell network.
+table ip filter {
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    iifname "lo" accept
+    ip protocol icmp ip saddr 10.0.0.0/8 counter accept comment "diagnostics"
+
+    # management plane
+    iifname "eth1" tcp dport 22 ip saddr 10.9.0.0/24 ip daddr 10.5.0.0/16 accept
+
+    # enterprise reaching the cell network
+    meta l4proto tcp ip saddr 10.0.0.0/16 ip daddr 10.5.0.0/16 accept
+
+    # modbus is not permitted from the corporate VLAN
+    tcp dport 502 ip saddr 10.1.0.0/16 ip daddr 10.5.0.0/16 drop
+
+    udp dport 161 ip daddr 10.5.0.0/16 accept
+    tcp dport 443 ip daddr 10.5.0.20 accept
+  }
+}

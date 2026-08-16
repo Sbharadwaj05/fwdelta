@@ -62,16 +62,21 @@ jobs:
       # file has no dynamic dependencies.
       - name: It must be statically linked
         run: |
-          BIN=target/x86_64-unknown-linux-musl/release/examples/delta_report
+          BIN=target/x86_64-unknown-linux-musl/release/soteria
           file "$BIN"
           file "$BIN" | grep -q 'static' || { echo "not statically linked"; exit 1; }
+          ldd "$BIN" 2>&1 | grep -q 'not a dynamic executable\|statically linked'
 
-      # deny.toml bans network-capable crates by name, which is a tripwire and
-      # not a proof. This is the proof.
+      # deny.toml bans network-capable crates by name, which is a tripwire, not
+      # a proof. This is the dynamic half, and it audits the shipped binary
+      # doing real work rather than a stand-in: parse two rulesets, build both
+      # models, diff, attribute and enumerate.
       - name: It must issue no network syscalls
         run: |
           ./scripts/syscall-audit.sh \
-            target/x86_64-unknown-linux-musl/release/examples/delta_report
+            target/x86_64-unknown-linux-musl/release/soteria \
+            diff --base fixtures/cell-gateway-base.nft \
+                 --head fixtures/cell-gateway-head.nft --format json
 
   kernel-differential:
     runs-on: ubuntu-24.04
@@ -80,6 +85,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: sudo apt-get update && sudo apt-get install -y nftables iproute2 socat iputils-ping
+
+      # The fixtures are inputs to the frontend, so nftables itself is the
+      # authority on whether they are valid. A fixture the real parser would
+      # reject teaches the wrong lesson about what the subset supports.
+      - name: Fixtures must be valid nftables
+        run: |
+          for f in fixtures/*.nft; do
+            sudo unshare -n nft -c -f "$f" || { echo "invalid fixture: $f"; exit 1; }
+            echo "ok: $f"
+          done
 
       # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor. The
       # harness deliberately needs no root, so lift the restriction rather than
