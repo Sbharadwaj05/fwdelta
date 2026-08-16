@@ -15,7 +15,7 @@ work.
 The published `x86_64-unknown-linux-musl` binary for this tag:
 
 ```
-sha256  b66b3072a53e0e8b142dc1b13b2a8b40bbf3c6304dec805a88989346bb732b0b
+sha256  ce5a1bb19c91addc96961632699ea72e7a48cec6199fa2840e97f4e7ad9a2e0a
 ```
 
 Rebuild it yourself with `scripts/reproducible-build.sh --digest`. The toolchain
