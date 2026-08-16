@@ -7,6 +7,14 @@ control.
 > status between them, so a reviewer sees the behavioural delta instead of a
 > text delta.
 
+> [!IMPORTANT]
+> **Scope: single-base-chain filter rulesets.** `jump`, `goto`, `return` and any
+> user-defined chain are rejected at exit 2 — including a helper chain nothing
+> jumps to. Docker adds chains, and most non-trivial rulesets have them, so a
+> good many real files will be refused outright rather than analysed. Nothing is
+> silently mismodelled: every rejection names a file, line and column. Chain
+> support is the top post-1.0 item ([D-10](docs/DECISIONS.md)).
+
 **Status: v1.0.0.** The blueprint's release model has no public 0.x: the
 repository goes public at `v1.0.0` with the parser, engine, diff and enumerator
 complete and tested, because partial capability shipped early reads as abandoned
@@ -15,7 +23,7 @@ work.
 The published `x86_64-unknown-linux-musl` binary for this tag:
 
 ```
-sha256  ce5a1bb19c91addc96961632699ea72e7a48cec6199fa2840e97f4e7ad9a2e0a
+sha256  f3abf9f4e4b2208b9fa6ed102c0a670dff78def0d6bf5aa0f54b7e60fff9488e
 ```
 
 Rebuild it yourself with `scripts/reproducible-build.sh --digest`. The toolchain
@@ -106,13 +114,19 @@ A verification tool that is wrong is worse than no tool, because it converts
 uncertainty into false confidence. The full treatment is
 [docs/SEMANTICS.md](docs/SEMANTICS.md); the headlines:
 
-| Limit | Consequence |
+Rejection and approximation are different things, and the table says which
+applies. Where a row reads **rejected**, no such ruleset is analysed at all: the
+run exits 2 with a position. Only one row below is an approximation.
+
+| Limit | Rejected or approximated |
 |---|---|
-| Stateless approximation | Return traffic for permitted connections is assumed permitted. Rulesets whose security depends on asymmetric conntrack behaviour are rejected at parse time, not approximated. |
-| No NAT | Filter semantics only. |
-| Single host | Results describe one device's policy, not end-to-end reachability, which also depends on routing. |
-| IPv4 | The header layout is 32-bit. IPv6 needs a 296-bit layout and is a version-two concern. |
-| Ports on portless protocols | The model gives every packet ports, including ICMP. Sound only while port matches pin a port-bearing protocol, which the frontend enforces. |
+| Connection tracking | **Rejected.** Any `ct` match of any kind — state, status, mark — refuses the whole file, exit 2, no exceptions. No `ct` ruleset is analysed under an approximation. The model is stateless: return traffic for permitted connections is assumed permitted. |
+| NAT | **Rejected.** Any `dnat`, `snat`, `masquerade`, `redirect`, or any chain of type `nat`, refuses the whole file, exit 2. |
+| Chains and jumps | **Rejected.** `jump`, `goto`, `return` and any user-defined chain refuse the whole file, exit 2, including a helper chain nothing jumps to. |
+| Address family | **Rejected.** `ip6`, `inet`, `arp`, `bridge` and `netdev` tables refuse the file, exit 2. IPv4 only; the header layout is 32-bit. |
+| `oifname` | **Rejected.** The dimension exists but has never been validated against the kernel, so it is refused rather than shipped on trust. |
+| Single host | **Scope, not approximation.** Results describe one device's filter table, not end-to-end reachability, which also depends on routing and other devices. |
+| Ports on portless protocols | **The one approximation.** The model gives every packet ports, including ICMP, so it contains points no real packet occupies. Sound only because the frontend refuses any rule constraining a port without pinning a protocol that has ports, which makes those points unreachable by any accepted ruleset. |
 
 **What a passing run establishes:** that the modelled ruleset permits exactly the
 packet set computed, under the stated model, and satisfies the stated assertions.
@@ -150,12 +164,42 @@ Every claim above has a mechanism behind it, and each runs in CI.
 | Probes exercise every dimension | Coverage is computed from the probes actually sent and printed on every run. A dimension held constant fails the run. |
 | No network access | Two complementary mechanisms, neither of which is a proof alone. `deny.toml` is static: it bans network-capable crates by name across the whole graph, but cannot detect capability by analysis. `scripts/syscall-audit.sh` is dynamic: it straces the binary and fails on a single socket syscall, which establishes that none occurred **on the paths the audit run exercised** — not that none exists in the binary. A socket call in an unreached branch would not appear. See below. |
 | One file, no dependencies | Static musl build, verified statically linked in CI. |
+| Performance is measured | `cargo run --release -p fwdelta-engine --example thousand_rules` prints the table below and asserts the partition invariant at every size. |
 | The build is reproducible | `scripts/reproducible-build.sh` builds twice and requires identical digests; the toolchain is pinned in `rust-toolchain.toml` and the graph in `Cargo.lock`, both committed. Two builds on one host catch embedded paths and timestamps; cross-machine reproducibility is what publishing the digest is for. |
 | No unsafe in first-party code | `#![forbid(unsafe_code)]` at every crate root. |
-| The parser has a boundary | [docs/NFTABLES-SUBSET.md](docs/NFTABLES-SUBSET.md), with a test asserting the cause and position of every rejection. |
+| The parser has a boundary | [docs/NFTABLES-SUBSET.md](docs/NFTABLES-SUBSET.md), with a test asserting the cause and position of every rejection. **Tested against nftables v1.0.9 only** — that is the single version every fixture and every sweep has been run against, so a dump from a different `nft` may use syntax the parser has never seen. It would fail loudly rather than silently, but the coverage claim is one version wide. |
 | No accepted match is silently dead | [docs/HOOK-MATCH-MATRIX.md](docs/HOOK-MATCH-MATRIX.md) sweeps every hook against every match type with real nftables and counters. Two combinations load and are then ignored by the kernel; both are rejected by the frontend. This class is invisible to the differential harness, which generates rulesets from the model it is testing. |
 | Every dimension a ruleset can constrain has been falsified | Each is broken deliberately by an `--inject-fault` mode and the harness is required to detect it. `oifname` is rejected by the frontend rather than shipped, precisely because the harness cannot exercise the output hook and so cannot falsify it. |
 | The engine agrees with itself | The accept set is derived two independent ways and `ChainModel::verify` requires them to match, alongside the partition invariant. |
+
+## Performance
+
+Measured on a 12th Gen Intel Core i5-12500H (16 logical cores, 15 GiB), Linux
+7.0.0-28, rustc 1.97.1, release profile. Reproduce with
+`cargo run --release -p fwdelta-engine --example thousand_rules`.
+
+| rules | analyse | accept set | per-rule retention | delta enumeration |
+|---|---|---|---|---|
+| 100 | 41 ms | 2,709 nodes | 179 KiB | 64 µs |
+| 1,000 | 1.5 s | 18,246 nodes | 1.8 MiB | 73 µs |
+| 2,000 | 5.6 s | 32,904 nodes | 3.5 MiB | 63 µs |
+| 5,000 | 36.4 s | 70,385 nodes | 8.7 MiB | 86 µs |
+
+A `diff` is two analyses. Reading the table honestly:
+
+- **Analysis is roughly quadratic.** Doubling 1,000 to 2,000 costs 3.7×; 2,000 to
+  5,000 costs 6.5×. Compiling the match predicates is a small and linear part of
+  that (0.9 s of the 36.4 s at 5,000); the rest is the two set-algebra passes,
+  which accumulate over a growing diagram.
+- **Viable in CI to about 2,000 rules**, where a diff completes in roughly 12
+  seconds. At 5,000 a diff takes about 73 seconds — usable, but noticeable. Past
+  that it degrades quadratically and would need the parallel prefix scan
+  sketched in [D-05](docs/DECISIONS.md).
+- **Memory is not the constraint.** Retaining a BDD per rule for exact
+  attribution costs 8.7 MiB at 5,000 rules.
+- **Delta enumeration is flat at tens of microseconds** regardless of ruleset
+  size, because it is a function of how much changed rather than of how large
+  the ruleset is. That is the number a reviewer actually waits on.
 
 ## Repository
 

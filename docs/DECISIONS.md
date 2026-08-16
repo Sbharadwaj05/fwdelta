@@ -428,3 +428,72 @@ predicate carrying the commit hash, ruleset digests, assertion results and tool
 version — an input to whatever signing the organisation already runs, rather
 than a substitute for it. §02's "signed report" is amended to "attestation,
 signed by the caller".
+
+---
+
+## D-10 Chain support — TOP POST-1.0 ITEM
+
+Ahead of iptables (roadmap 1.1) and ahead of D-06. Everything else on the
+roadmap is worth less until this is done: it is the difference between a tool
+that works on real rulesets and one that works on flat ones.
+
+### Why it ranks first
+
+1.0 rejects `jump`, `goto`, `return` and any user-defined chain, at exit 2 with a
+position. That is safe — nothing is silently mismodelled — but it is not narrow.
+Docker adds chains. Most non-trivial rulesets have them. The practical input
+surface is single-base-chain filter rulesets, which is materially narrower than
+"nftables files", and a reader deserves to know that before deciding whether the
+tool applies to them. It is now stated above the fold in the README as well as in
+the boundaries table.
+
+An external reviewer read the repository and did not identify this limit at all,
+which is the evidence that the previous documentation was not doing its job.
+
+### It is tractable, and the algebra already exists
+
+Recorded so the reasoning survives to whoever picks it up.
+
+A non-recursive `jump` **inlines** the target chain's rules at the jump's
+position. `return` inside the target means "fall through to the base chain's
+continuation", which is exactly what inlining gives for free: the rules after the
+inlined block are the continuation.
+
+`goto` differs in one respect and it matters. It does not return, so the base
+chain's walk ends at the target. Inlining a `goto` therefore means splicing the
+target's rules in and **discarding everything after them** on that path, with the
+base chain's policy no longer reachable through it.
+
+Both are expressible in the existing first-match encoding with no new dimension
+and no change to the header space. `eff_i = m_i AND NOT matched_{<i}` still holds
+over the flattened list; the partition property that makes attribution exact is
+unaffected.
+
+The awkward parts are not the algebra:
+
+- **Recursion detection.** nftables forbids loops, but the frontend cannot assume
+  a well-formed file. Needs a cycle check over the jump graph with a clear error
+  naming the cycle.
+- **Depth limits.** Inlining is exponential in the worst case — a chain jumped to
+  from *k* places is inlined *k* times. Needs a bound with a loud failure rather
+  than an unbounded expansion.
+- **Attribution through inlining.** A finding must cite the rule's position in
+  the *source file*, not its position in the flattened list. The `Origin` already
+  carries file, line and column, so this is bookkeeping rather than design, but it
+  is the part most likely to produce a subtly wrong report if rushed.
+- **Differential testing.** The kernel harness must generate chained rulesets and
+  verify against real traversal, or this ships with the same unvalidated status
+  that got `oifname` rejected.
+
+### Candidate, not to be acted on: relaxing the unreferenced-chain rejection
+
+A user-defined chain that nothing jumps to genuinely cannot affect any base
+chain's verdict, so accepting the file and ignoring that chain would be sound.
+
+It is deliberately not done. The rejection is conservative, and the relaxation is
+exactly the kind that becomes a silent skip if someone later gets the
+reachability analysis slightly wrong — accept the file, miss a jump, ignore a
+chain that did matter. That is the failure this project exists to prevent, and it
+would be self-inflicted. If it is ever taken, it needs the jump graph to be
+computed and the "nothing reaches this" claim to be a checked property rather
+than an assumption.

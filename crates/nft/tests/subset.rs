@@ -297,3 +297,109 @@ fn interface_names_parse_quoted_or_bare() {
     let rs = parse("t.nft", src).unwrap();
     assert_eq!(rs.chains[0].rules[0].matches.iif, rs.chains[0].rules[1].matches.iif);
 }
+
+// ---------------------------------------------------- chains and jumps
+
+/// The limit an external reviewer missed entirely, pinned in every shape it
+/// takes. All of these are valid nftables — each was confirmed with `nft -c -f`
+/// before being written down — and every one is refused with a position.
+///
+/// The point is not that they are rejected but that they are rejected
+/// *loudly*: there is no code path that models chain traversal, so implicit
+/// return and resumption of the base-chain walk are unreachable rather than
+/// approximated.
+#[test]
+fn chain_traversal_is_rejected_in_every_form() {
+    let cases: &[(&str, &str, Cause, &str)] = &[
+        (
+            "jump from a base chain",
+            "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    ip saddr 10.0.0.0/8 jump services\n  }\n}",
+            Cause::OutOfScope,
+            "`jump` to another chain is not modelled",
+        ),
+        (
+            "goto from a base chain",
+            "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    ip saddr 10.0.0.0/8 goto services\n  }\n}",
+            Cause::OutOfScope,
+            "`goto` to another chain is not modelled",
+        ),
+        (
+            "return in a base chain",
+            "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    ip saddr 10.0.0.0/8 return\n  }\n}",
+            Cause::OutOfScope,
+            "`return` is not a filtering verdict",
+        ),
+        (
+            "jump to a chain that does not exist",
+            "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    ip saddr 10.0.0.0/8 jump nosuchchain\n  }\n}",
+            Cause::OutOfScope,
+            "`jump` to another chain is not modelled",
+        ),
+    ];
+
+    for (what, src, cause, message) in cases {
+        let err = parse("t.nft", src).map(|_| ()).expect_err(what);
+        assert_eq!(err.cause, *cause, "{what}: {err}");
+        assert!(err.to_string().contains(message), "{what}: {err}");
+        assert_eq!(err.line, 4, "{what} should be flagged at the statement: {err}");
+    }
+}
+
+/// A user-defined chain refuses the file even when nothing jumps to it.
+///
+/// Deliberately conservative. A chain nothing reaches cannot change a base
+/// chain's verdict, so accepting the file would be sound — but that relaxation
+/// is the kind that becomes a silent skip if the reachability analysis is ever
+/// slightly wrong. See D-10.
+#[test]
+fn an_unreferenced_user_chain_still_rejects_the_file() {
+    let src = "table ip filter {\n  chain services {\n    tcp dport 22 accept\n  }\n  chain input {\n    type filter hook input priority filter; policy drop;\n    tcp dport 443 accept\n  }\n}";
+    let err = parse("t.nft", src).map(|_| ()).expect_err("an unreferenced helper chain");
+    assert_eq!(err.cause, Cause::OutOfScope);
+    assert!(err.to_string().contains("regular chain, with no hook"), "{err}");
+    assert!(err.to_string().contains("jump or goto"), "the hint should say why: {err}");
+}
+
+/// Which message surfaces depends on file order, but the file is refused either
+/// way. Worth pinning so a future reordering of the parser does not turn one of
+/// these into an acceptance.
+#[test]
+fn chain_rejection_does_not_depend_on_declaration_order() {
+    let helper_first = "table ip filter {\n  chain services {\n    tcp dport 22 accept\n  }\n  chain input {\n    type filter hook input priority filter; policy drop;\n    jump services\n  }\n}";
+    let base_first = "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    jump services\n  }\n  chain services {\n    tcp dport 22 accept\n  }\n}";
+
+    let a = parse("t.nft", helper_first).map(|_| ()).unwrap_err();
+    let b = parse("t.nft", base_first).map(|_| ()).unwrap_err();
+    assert_eq!(a.cause, Cause::OutOfScope);
+    assert_eq!(b.cause, Cause::OutOfScope);
+    // The helper-first file trips on the chain header, the base-first file on
+    // the jump. Different messages, same refusal.
+    assert!(a.to_string().contains("regular chain"), "{a}");
+    assert!(b.to_string().contains("`jump`"), "{b}");
+}
+
+/// Parsing precedes chain selection, so a jump in a chain the user did not ask
+/// about still refuses the file. Anything else would let `--chain` hide an
+/// unmodellable construct.
+#[test]
+fn a_jump_in_an_unselected_chain_still_rejects() {
+    let src = "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    tcp dport 443 accept\n  }\n  chain output {\n    type filter hook output priority filter; policy accept;\n    ip daddr 10.0.0.0/8 jump elsewhere\n  }\n}";
+    let err = parse("t.nft", src).map(|_| ()).expect_err("jump in the output chain");
+    assert_eq!(err.cause, Cause::OutOfScope);
+    assert_eq!(err.line, 8);
+}
+
+/// Every `ct` form is refused, not just `ct state`. The soundness table says
+/// "no exceptions", and this is what makes that true.
+#[test]
+fn every_conntrack_form_is_rejected() {
+    for stmt in ["ct state established,related accept", "ct status dnat accept", "ct mark 1 accept"]
+    {
+        let src = format!(
+            "table ip filter {{\n  chain input {{\n    type filter hook input priority filter; policy drop;\n    {stmt}\n  }}\n}}"
+        );
+        let err = parse("t.nft", &src).map(|_| ()).expect_err(stmt);
+        assert_eq!(err.cause, Cause::OutOfScope, "{stmt}: {err}");
+        assert!(err.to_string().contains("connection tracking"), "{stmt}: {err}");
+    }
+}

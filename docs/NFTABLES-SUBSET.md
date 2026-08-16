@@ -31,7 +31,7 @@ a shared misunderstanding of the syntax cannot cancel itself out.
 | hooks `input`, `output`, `forward` | supported | |
 | hooks `prerouting`, `postrouting` | rejected | only reachable with NAT or routing in scope |
 | `type nat` / `type route` | rejected | NAT is a non-goal (blueprint §02) |
-| regular (non-base) chains | rejected | needs `jump`/`goto`, see below |
+| regular (non-base) chains | rejected | **rejects the whole file, even when nothing jumps to the chain.** Conservative on purpose; see D-10 |
 | `policy accept` / `policy drop` | supported | |
 | `include`, `define`, `set`, `map`, `element` | rejected | deferred; would need a resolution pass |
 
@@ -79,7 +79,7 @@ a shared misunderstanding of the syntax cannot cancel itself out.
 | `counter` | supported | no semantic effect; parsed and ignored |
 | `comment "..."` | supported | no semantic effect |
 | `log` (with `prefix`, `level`, `flags`) | supported | no semantic effect |
-| `jump`, `goto` | rejected | multi-chain traversal is not modelled at 1.0 |
+| `jump`, `goto` | rejected | multi-chain traversal is not modelled at 1.0. Top post-1.0 item; see D-10 for the inlining sketch |
 | `return` | rejected | only meaningful inside a regular chain |
 | `queue`, `dup`, `fwd` | rejected | not a filtering verdict |
 | `snat`, `dnat`, `masquerade`, `redirect` | rejected | NAT is a non-goal (blueprint §02) |

@@ -195,28 +195,51 @@ impl DiffReport {
 /// that drifted would be the one making a promise the model does not keep.
 pub fn model_boundaries() -> Vec<(&'static str, &'static str)> {
     vec![
+        // Every row here has to survive one test: could a reader take it to
+        // mean "analysed under an approximation" when the truth is "refused"?
+        // An external reviewer read the old statefulness wording that way and
+        // concluded the output was unsound for production traffic. Where the
+        // answer is rejection, the row says rejected.
         (
-            "Statefulness",
-            "Stateless. New connections in the forward direction are governed by the ruleset; \
-             return traffic for permitted connections is assumed permitted. Rulesets whose \
-             security depends on connection tracking are rejected at parse time rather than \
-             approximated.",
+            "Connection tracking",
+            "Rejected. Any ruleset containing a `ct` match of any kind -- state, status, mark, \
+             or otherwise -- is refused at parse time with exit 2. No ct ruleset is analysed \
+             under an approximation. The model itself is stateless: new connections in the \
+             forward direction are governed by the ruleset and return traffic for permitted \
+             connections is assumed permitted.",
         ),
         (
             "NAT",
-            "Not modelled. Address translation changes packet identity in transit, so a ruleset \
-             containing NAT is rejected rather than analysed with NAT ignored.",
+            "Rejected. Any NAT statement (dnat, snat, masquerade, redirect) or any chain of type \
+             nat refuses the whole file with exit 2. Address translation changes packet identity \
+             in transit, so a filter analysis of a translating ruleset would describe packets \
+             that do not exist as analysed.",
+        ),
+        (
+            "Chains and jumps",
+            "Rejected. Only base chains with a hook are analysed. `jump`, `goto`, `return` and \
+             any user-defined chain definition refuse the whole file with exit 2 -- including a \
+             helper chain nothing jumps to. The practical input surface is therefore \
+             single-base-chain filter rulesets, which is narrower than nftables generally.",
         ),
         (
             "Scope",
             "One host's filter table. Not end-to-end reachability, which also depends on routing \
              and on other devices.",
         ),
-        ("Address family", "IPv4 only. The header layout is 32-bit; IPv6 is not analysed."),
+        (
+            "Address family",
+            "IPv4 only, and other families are rejected rather than partially analysed. A table \
+             of family ip6, inet, arp, bridge or netdev refuses the file with exit 2. The header \
+             layout is 32-bit.",
+        ),
         (
             "Ports on portless protocols",
-            "Every packet is given source and destination ports, including ICMP. Sound only \
-             because the frontend requires a port match to pin a protocol that has ports.",
+            "A genuine approximation, not a rejection: every packet is given source and \
+             destination ports, including ICMP, so the model contains points no real packet \
+             occupies. This is sound only because the frontend refuses any rule that constrains \
+             a port without pinning a protocol that has ports, which makes those points \
+             unreachable by any accepted ruleset.",
         ),
         (
             "Output interface",

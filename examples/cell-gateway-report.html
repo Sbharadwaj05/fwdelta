@@ -134,16 +134,18 @@ fwdelta 0.1.0 &middot; generated 2025-08-15T23:20:00Z
 <h2>What this analysis did not cover</h2>
 <div class="bounds">
 <dl>
-<dt>Statefulness</dt>
-<dd>Stateless. New connections in the forward direction are governed by the ruleset; return traffic for permitted connections is assumed permitted. Rulesets whose security depends on connection tracking are rejected at parse time rather than approximated.</dd>
+<dt>Connection tracking</dt>
+<dd>Rejected. Any ruleset containing a `ct` match of any kind -- state, status, mark, or otherwise -- is refused at parse time with exit 2. No ct ruleset is analysed under an approximation. The model itself is stateless: new connections in the forward direction are governed by the ruleset and return traffic for permitted connections is assumed permitted.</dd>
 <dt>NAT</dt>
-<dd>Not modelled. Address translation changes packet identity in transit, so a ruleset containing NAT is rejected rather than analysed with NAT ignored.</dd>
+<dd>Rejected. Any NAT statement (dnat, snat, masquerade, redirect) or any chain of type nat refuses the whole file with exit 2. Address translation changes packet identity in transit, so a filter analysis of a translating ruleset would describe packets that do not exist as analysed.</dd>
+<dt>Chains and jumps</dt>
+<dd>Rejected. Only base chains with a hook are analysed. `jump`, `goto`, `return` and any user-defined chain definition refuse the whole file with exit 2 -- including a helper chain nothing jumps to. The practical input surface is therefore single-base-chain filter rulesets, which is narrower than nftables generally.</dd>
 <dt>Scope</dt>
 <dd>One host&#39;s filter table. Not end-to-end reachability, which also depends on routing and on other devices.</dd>
 <dt>Address family</dt>
-<dd>IPv4 only. The header layout is 32-bit; IPv6 is not analysed.</dd>
+<dd>IPv4 only, and other families are rejected rather than partially analysed. A table of family ip6, inet, arp, bridge or netdev refuses the file with exit 2. The header layout is 32-bit.</dd>
 <dt>Ports on portless protocols</dt>
-<dd>Every packet is given source and destination ports, including ICMP. Sound only because the frontend requires a port match to pin a protocol that has ports.</dd>
+<dd>A genuine approximation, not a rejection: every packet is given source and destination ports, including ICMP, so the model contains points no real packet occupies. This is sound only because the frontend refuses any rule that constrains a port without pinning a protocol that has ports, which makes those points unreachable by any accepted ruleset.</dd>
 <dt>Output interface</dt>
 <dd>Rejected, not modelled. The differential harness runs on the input hook, where the output interface is never set, so the dimension has never been checked against the kernel.</dd>
 <dt>Frontend subset</dt>

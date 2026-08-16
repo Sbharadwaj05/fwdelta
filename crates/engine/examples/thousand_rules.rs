@@ -98,6 +98,23 @@ fn generate(n: usize, iface_fraction: u64, seed: u64) -> Ruleset {
     Ruleset { label: format!("generated-{n}"), chains: vec![chain] }
 }
 
+/// A time with no host is not a measurement.
+fn host() -> String {
+    let cpu = std::fs::read_to_string("/proc/cpuinfo")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("model name"))
+                .and_then(|l| l.split(':').nth(1))
+                .map(|v| v.trim().to_string())
+        })
+        .unwrap_or_else(|| "unknown cpu".into());
+    format!(
+        "{cpu}, rustc {}",
+        option_env!("RUSTC_VERSION").unwrap_or("(pinned, see rust-toolchain.toml)")
+    )
+}
+
 fn nodes(model: &fwdelta_engine::ChainModel) -> (usize, usize, usize) {
     let matched: usize = model.rules.iter().map(|r| r.matched.size()).sum();
     let effective: usize = model.rules.iter().map(|r| r.effective.size()).sum();
@@ -181,8 +198,11 @@ fn run(label: &str, order: VarOrder, rs: &Ruleset, syms: &SymbolTable) {
 }
 
 fn main() {
-    println!("FWDELTA M2 BENCHMARK\n");
+    println!("FWDELTA BENCHMARK\n");
+    println!("host: {}\n", host());
 
+    // Both variable orderings and both interface densities, at the sizes where
+    // running four configurations is cheap.
     for n in [100usize, 1000] {
         // No interface matches anywhere: the two interface dimensions exist in
         // the variable set but appear in no diagram.
@@ -200,6 +220,16 @@ fn main() {
         run("interleaved, 20% iface", VarOrder::AddrInterleaved, &scoped, &syms_scoped);
         println!();
     }
+
+    // Larger inputs, default configuration only: four configurations at 5000
+    // rules would dominate a CI run, and the question at this size is where the
+    // analysis stops being viable rather than which ordering wins.
+    println!("larger inputs (interleaved, no iface)");
+    for n in [2000usize, 5000] {
+        let rs = generate(n, 0, 0x2026_0815);
+        run(&format!("{n} rules"), VarOrder::AddrInterleaved, &rs, &SymbolTable::default());
+    }
+    println!();
 
     // The D-02 cost question, isolated: identical rules, identical everything,
     // with the interface dimensions present but unconstrained. If the widening
