@@ -1,10 +1,10 @@
-//! Soteria's vendor-neutral intermediate representation.
+//! fwdelta's vendor-neutral intermediate representation.
 //!
 //! Every frontend targets this and the engine consumes only this, so adding
 //! iptables or pfSense later costs a parser and nothing else.
 //!
 //! This crate describes what a rule *says*. Computing with it — accept sets,
-//! diffs, enumeration — is `soteria-engine`. Nothing here performs I/O.
+//! diffs, enumeration — is `fwdelta-engine`. Nothing here performs I/O.
 
 #![forbid(unsafe_code)]
 

@@ -8,7 +8,7 @@
 //! cheap and is what the enumerator relies on when reading fixed bits back out.
 
 use biodivine_lib_bdd::{Bdd, BddVariable, BddVariableSet};
-use soteria_ir::{Field, HEADER_BITS, IntervalSet, Match, SymbolTable};
+use fwdelta_ir::{Field, HEADER_BITS, IntervalSet, Match, SymbolTable};
 
 /// BDD variable ordering.
 ///
@@ -245,7 +245,7 @@ impl Layout {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soteria_ir::IfMatch;
+    use fwdelta_ir::IfMatch;
 
     fn layouts() -> Vec<Layout> {
         vec![Layout::new(VarOrder::FieldMajor), Layout::new(VarOrder::AddrInterleaved)]

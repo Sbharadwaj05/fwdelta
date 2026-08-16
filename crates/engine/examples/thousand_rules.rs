@@ -9,12 +9,12 @@
 //!    on how many variables exist, so unused interface dimensions should cost
 //!    nothing at all — but "should" is why this file exists.
 //!
-//! Run with: `cargo run --release -p soteria-engine --example thousand_rules`
+//! Run with: `cargo run --release -p fwdelta-engine --example thousand_rules`
 
 use std::time::Instant;
 
-use soteria_engine::{EnumOptions, Field, Layout, VarOrder, analyse, enumerate};
-use soteria_ir::{Action, Chain, Hook, IfMatch, Match, Origin, Ruleset, SymbolTable};
+use fwdelta_engine::{EnumOptions, Field, Layout, VarOrder, analyse, enumerate};
+use fwdelta_ir::{Action, Chain, Hook, IfMatch, Match, Origin, Ruleset, SymbolTable};
 
 /// Deterministic, dependency-free, and good enough to shape a ruleset.
 struct Rng(u64);
@@ -98,7 +98,7 @@ fn generate(n: usize, iface_fraction: u64, seed: u64) -> Ruleset {
     Ruleset { label: format!("generated-{n}"), chains: vec![chain] }
 }
 
-fn nodes(model: &soteria_engine::ChainModel) -> (usize, usize, usize) {
+fn nodes(model: &fwdelta_engine::ChainModel) -> (usize, usize, usize) {
     let matched: usize = model.rules.iter().map(|r| r.matched.size()).sum();
     let effective: usize = model.rules.iter().map(|r| r.effective.size()).sum();
     (model.accept.size(), matched, effective)
@@ -108,7 +108,7 @@ fn nodes(model: &soteria_engine::ChainModel) -> (usize, usize, usize) {
 ///
 /// The rule has to be one that actually decides packets: narrowing a shadowed
 /// rule changes nothing, and a benchmark whose delta is empty measures nothing.
-fn mutate(rs: &Ruleset, model: &soteria_engine::ChainModel) -> Ruleset {
+fn mutate(rs: &Ruleset, model: &fwdelta_engine::ChainModel) -> Ruleset {
     let target = model
         .rules
         .iter()
@@ -144,7 +144,7 @@ fn run(label: &str, order: VarOrder, rs: &Ruleset, syms: &SymbolTable) {
     let retained = matched_nodes + eff_nodes;
 
     // The realistic workload: one rule edited, then the delta enumerated. This
-    // is what `soteria diff` actually does, and it is the number that has to
+    // is what `fwdelta diff` actually does, and it is the number that has to
     // stay sub-second.
     let head = mutate(rs, &model);
     let t1 = Instant::now();
@@ -181,7 +181,7 @@ fn run(label: &str, order: VarOrder, rs: &Ruleset, syms: &SymbolTable) {
 }
 
 fn main() {
-    println!("SOTERIA M2 BENCHMARK\n");
+    println!("FWDELTA M2 BENCHMARK\n");
 
     for n in [100usize, 1000] {
         // No interface matches anywhere: the two interface dimensions exist in
@@ -211,7 +211,7 @@ fn main() {
     let support: usize = model.accept.support_set().len();
     println!(
         "D-02 check: header declares {} variables, the accept set's diagram touches {}",
-        soteria_engine::HEADER_BITS,
+        fwdelta_engine::HEADER_BITS,
         support
     );
     println!(

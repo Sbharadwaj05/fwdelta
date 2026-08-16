@@ -19,7 +19,7 @@
 
 use biodivine_lib_bdd::Bdd;
 
-use soteria_ir::{Field, IntervalSet};
+use fwdelta_ir::{Field, IntervalSet};
 
 use crate::header::Layout;
 use crate::region::{Region, merge};

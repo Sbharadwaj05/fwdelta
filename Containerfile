@@ -4,8 +4,8 @@
 # without a Rust toolchain; it is not the deployment story. That is the static
 # musl binary this builds, which copies onto an isolated host on its own.
 #
-#   podman build -t soteria .
-#   podman run --rm -v "$PWD:/work:ro" soteria \
+#   podman build -t fwdelta .
+#   podman run --rm -v "$PWD:/work:ro" fwdelta \
 #       diff --base /work/base.nft --head /work/head.nft
 #
 # The final stage is `scratch`: no shell, no package manager, no libc. There is
@@ -27,17 +27,17 @@ COPY . .
 # otherwise makes two builds of identical source differ.
 ENV CARGO_INCREMENTAL=0
 ENV RUSTFLAGS="--remap-path-prefix=/src=. -C debuginfo=0"
-RUN cargo build --release --locked --target x86_64-unknown-linux-musl -p soteria-cli
+RUN cargo build --release --locked --target x86_64-unknown-linux-musl -p fwdelta-cli
 
 FROM scratch
 COPY --from=build \
-    /src/target/x86_64-unknown-linux-musl/release/soteria /soteria
+    /src/target/x86_64-unknown-linux-musl/release/fwdelta /fwdelta
 
 # Documented so the image is self-describing to anyone who pulls it without the
 # repository to hand.
-LABEL org.opencontainers.image.title="soteria"
+LABEL org.opencontainers.image.title="fwdelta"
 LABEL org.opencontainers.image.description="Semantic diff and formal reachability analysis for firewall policy"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.source="https://github.com/subhashb05/soteria"
+LABEL org.opencontainers.image.source="https://github.com/Sbharadwaj05/fwdelta"
 
-ENTRYPOINT ["/soteria"]
+ENTRYPOINT ["/fwdelta"]

@@ -20,7 +20,7 @@
 
 use std::collections::BTreeMap;
 
-use soteria_ir::{Field, IfMatch, IntervalSet};
+use fwdelta_ir::{Field, IfMatch, IntervalSet};
 
 /// What an assertion claims.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -492,7 +492,7 @@ iif   = "eth1"
     #[test]
     fn an_assertion_silent_on_interface_covers_all_256_symbols() {
         let p = parse(DOC).unwrap();
-        let syms = soteria_ir::SymbolTable::from_names(["eth0", "eth1"]).unwrap();
+        let syms = fwdelta_ir::SymbolTable::from_names(["eth0", "eth1"]).unwrap();
 
         let silent = p.assertions[0].iif_match();
         assert_eq!(silent, IfMatch::Any);
@@ -508,8 +508,8 @@ iif   = "eth1"
     #[test]
     fn growing_the_table_does_not_move_a_silent_assertion() {
         let p = parse(DOC).unwrap();
-        let narrow = soteria_ir::SymbolTable::from_names(["eth0"]).unwrap();
-        let wide = soteria_ir::SymbolTable::from_names(["eth0", "eth1", "eth2", "wg0"]).unwrap();
+        let narrow = fwdelta_ir::SymbolTable::from_names(["eth0"]).unwrap();
+        let wide = fwdelta_ir::SymbolTable::from_names(["eth0", "eth1", "eth2", "wg0"]).unwrap();
         let m = p.assertions[0].iif_match();
         assert_eq!(m.resolve(&narrow), m.resolve(&wide));
     }

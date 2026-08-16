@@ -16,7 +16,7 @@ This table is maintained by hand. What keeps it from drifting is
 the cause and the reported position for each. A row that starts passing there is
 a row that is out of date here.
 
-The frontend is also checked against itself: `soteria-kerneldiff` generates a
+The frontend is also checked against itself: `fwdelta-kerneldiff` generates a
 ruleset, emits it as nftables, parses it back and requires the IR to survive the
 trip. Emitter and parser are independent code running in opposite directions, so
 a shared misunderstanding of the syntax cannot cancel itself out.

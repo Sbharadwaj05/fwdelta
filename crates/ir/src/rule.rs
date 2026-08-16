@@ -4,7 +4,7 @@
 //! keep their source position so a finding can be pointed back at the line that
 //! caused it. Evaluation is first-match; the written semantics are in
 //! `docs/SEMANTICS.md` and the executable statement of them is
-//! `soteria_engine::accept`.
+//! `fwdelta_engine::accept`.
 
 use core::fmt;
 

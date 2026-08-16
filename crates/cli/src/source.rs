@@ -5,7 +5,7 @@
 //! the blueprint's headline invocation work:
 //!
 //! ```text
-//! soteria diff --base main --head HEAD --path cell-gateway.nft
+//! fwdelta diff --base main --head HEAD --path cell-gateway.nft
 //! ```
 //!
 //! **This is the only place the tool spawns a process**, and it only happens
@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn a_path_is_read_directly() {
-        let dir = std::env::temp_dir().join("soteria-source-test");
+        let dir = std::env::temp_dir().join("fwdelta-source-test");
         let _ = std::fs::create_dir_all(&dir);
         let file = dir.join("x.nft");
         std::fs::write(&file, "table ip filter {}\n").unwrap();

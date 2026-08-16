@@ -19,9 +19,9 @@
 //! failed.
 
 use biodivine_lib_bdd::Bdd;
-use soteria_engine::packet::{Packet, witness};
-use soteria_engine::{ChainModel, Field, IntervalSet, Layout};
-use soteria_ir::{Match, Ruleset, SymbolTable};
+use fwdelta_engine::packet::{Packet, witness};
+use fwdelta_engine::{ChainModel, Field, IntervalSet, Layout};
+use fwdelta_ir::{Match, Ruleset, SymbolTable};
 
 use crate::parse::{Assertion, Endpoint, Kind, Policy, PolicyError};
 
@@ -242,8 +242,8 @@ pub fn evaluate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soteria_engine::{VarOrder, analyse};
-    use soteria_ir::{Action, Chain, Hook, Origin};
+    use fwdelta_engine::{VarOrder, analyse};
+    use fwdelta_ir::{Action, Chain, Hook, Origin};
 
     fn ruleset(rules: Vec<(Match, Action)>, policy: Action) -> Ruleset {
         let mut c = Chain::new("input", Hook::Input, policy);

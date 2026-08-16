@@ -1,9 +1,9 @@
-# Soteria
+# fwdelta
 
 Semantic diff and formal reachability analysis for firewall policy under version
 control.
 
-> Soteria takes two firewall rulesets and prints exactly which packets changed
+> fwdelta takes two firewall rulesets and prints exactly which packets changed
 > status between them, so a reviewer sees the behavioural delta instead of a
 > text delta.
 
@@ -15,7 +15,7 @@ work.
 The published `x86_64-unknown-linux-musl` binary for this tag:
 
 ```
-sha256  d6fdd1bd4f89834c4c53857cfd92a6d75cae8959e0087275a70ce065051b348f
+sha256  b66b3072a53e0e8b142dc1b13b2a8b40bbf3c6304dec805a88989346bb732b0b
 ```
 
 Rebuild it yourself with `scripts/reproducible-build.sh --digest`. The toolchain
@@ -67,7 +67,7 @@ someone else's.
   containing NAT is rejected with a clear message rather than analysed with NAT
   ignored.
 - **Full stateful semantics.** See the soundness boundaries below.
-- **Runtime enforcement.** Soteria never connects to a device, never reads a
+- **Runtime enforcement.** fwdelta never connects to a device, never reads a
   running configuration and never pushes one. Configuration text is the only
   input.
 - **Traffic analysis.** No packet capture, no flow records, no live observation.
@@ -117,7 +117,7 @@ Every claim above has a mechanism behind it, and each runs in CI.
 
 | Claim | Mechanism |
 |---|---|
-| The model matches the kernel | `soteria-kerneldiff` loads generated rulesets into an unprivileged network namespace, sends real packets, and reads per-rule counters for the real verdict. Disagreement is a failing test with a reproducible seed. |
+| The model matches the kernel | `fwdelta-kerneldiff` loads generated rulesets into an unprivileged network namespace, sends real packets, and reads per-rule counters for the real verdict. Disagreement is a failing test with a reproducible seed. |
 | The harness can actually fail | `--self-test` injects five deliberately broken models and requires every one to be detected. A fault that survives means the dimension it breaks is untested. |
 | Probes exercise every dimension | Coverage is computed from the probes actually sent and printed on every run. A dimension held constant fails the run. |
 | No network access | Two complementary mechanisms, neither of which is a proof alone. `deny.toml` is static: it bans network-capable crates by name across the whole graph, but cannot detect capability by analysis. `scripts/syscall-audit.sh` is dynamic: it straces the binary and fails on a single socket syscall, which establishes that none occurred **on the paths the audit run exercised** — not that none exists in the binary. A socket call in an unreached branch would not appear. See below. |
@@ -135,7 +135,7 @@ Every claim above has a mechanism behind it, and each runs in CI.
 crates/ir          what a rule says: seven match dimensions, 120 bits
 crates/engine      what it means: BDD encoding, accept sets, diff, enumeration
 crates/nft         the nftables frontend
-crates/cli         the `soteria` binary
+crates/cli         the `fwdelta` binary
 crates/kerneldiff  differential testing against the Linux kernel
 fixtures/          rulesets used by the tests, validated against real nft in CI
 docs/SEMANTICS.md         the specification the implementation is reviewed against
@@ -154,28 +154,28 @@ cargo build --release --target x86_64-unknown-linux-musl
 scripts/reproducible-build.sh
 
 # or run it from a container with nothing else in it
-podman build -t soteria -f Containerfile .
-podman run --rm -v "$PWD:/work:ro" soteria diff --base /work/base.nft --head /work/head.nft
+podman build -t fwdelta -f Containerfile .
+podman run --rm -v "$PWD:/work:ro" fwdelta diff --base /work/base.nft --head /work/head.nft
 ```
 
 Comparing two revisions:
 
 ```sh
-soteria diff --base fixtures/cell-gateway-base.nft \
+fwdelta diff --base fixtures/cell-gateway-base.nft \
              --head fixtures/cell-gateway-head.nft
 
 # or against git history, which is the CI shape
-soteria diff --base main --head HEAD --path cell-gateway.nft
+fwdelta diff --base main --head HEAD --path cell-gateway.nft
 
 # machine-readable, untruncated, counts as strings so 2^120 survives
-soteria diff --base main --head HEAD --path cell-gateway.nft --format json
+fwdelta diff --base main --head HEAD --path cell-gateway.nft --format json
 
 # what is dead in a single ruleset
-soteria check cell-gateway.nft
+fwdelta check cell-gateway.nft
 
 # with intent assertions, and an attestation for the audit trail
-soteria diff --base main --head HEAD --path cell-gateway.nft \
-             --assert policy.toml --attest soteria.intoto.json
+fwdelta diff --base main --head HEAD --path cell-gateway.nft \
+             --assert policy.toml --attest fwdelta.intoto.json
 ```
 
 Assertions are TOML, and zones let a claim be written in IEC 62443 vocabulary
@@ -207,7 +207,7 @@ The attestation is an unsigned in-toto predicate. It carries the ruleset
 digests, the tool version, the assertion results **and the model's boundaries**
 — an auditor reading it can see that the analysis was stateless, IPv4-only, over
 one host's filter table, and what it therefore does not establish. Sign it
-detached with your own tooling: Soteria holds no key material, which is the same
+detached with your own tooling: fwdelta holds no key material, which is the same
 promise as never connecting to a device.
 
 Exit codes are the whole interface as far as a pipeline is concerned: `0`
@@ -220,8 +220,8 @@ The differential harness needs `nftables`, `iproute2`, `socat` and unprivileged
 user namespaces. It needs no root.
 
 ```sh
-cargo run --release -p soteria-kerneldiff -- --self-test
-cargo run --release -p soteria-kerneldiff -- --rules 50 --packets 120 --rounds 4
+cargo run --release -p fwdelta-kerneldiff -- --self-test
+cargo run --release -p fwdelta-kerneldiff -- --rules 50 --packets 120 --rounds 4
 ```
 
 ## Prior art
@@ -233,7 +233,7 @@ cargo run --release -p soteria-kerneldiff -- --rules 50 --packets 120 --rounds 4
   algebra over a header bit vector.
 - **Batfish** (Fogel et al., NSDI 2015) — defines the boundary of this project's
   scope by occupying everything beyond it. Where the two overlap, Batfish is
-  deeper. Soteria is not a Batfish competitor and does not attempt to become one:
+  deeper. fwdelta is not a Batfish competitor and does not attempt to become one:
   the contribution is that the analysis runs unprompted, on every pull request,
   and produces output a human reads in five seconds.
 

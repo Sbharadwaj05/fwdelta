@@ -406,7 +406,7 @@ genuinely load-bearing.
 
 ## D-09 Attestation is unsigned; the caller signs it — ACCEPTED 2026-08-15
 
-Blueprint §02 lists a signed report as a 1.0 capability. Soteria emits an
+Blueprint §02 lists a signed report as a 1.0 capability. fwdelta emits an
 in-toto predicate and does not sign it. Signing is the caller's business,
 detached, with their own tooling and their own key.
 
@@ -417,7 +417,7 @@ Two reasons, and the second is the stronger one:
   dependency graph in the one direction the project's deployment story cannot
   afford.
 - **A tool that promises to touch nothing should never hold a private key.**
-  Section 02 is emphatic that Soteria never connects to a device and never
+  Section 02 is emphatic that fwdelta never connects to a device and never
   pushes configuration. Key custody is the same category of promise. An offline
   analyser that reads two text files has no business managing key material, and
   an operator who has to hand it one has been given a reason to distrust the

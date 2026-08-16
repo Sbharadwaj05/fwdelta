@@ -1,6 +1,6 @@
 # Semantics
 
-What Soteria means by a packet, a rule and a verdict. This is the M0 deliverable
+What fwdelta means by a packet, a rule and a verdict. This is the M0 deliverable
 and the specification the implementation is reviewed against. Where the model
 and this document disagree, this document is wrong and should be corrected —
 but the disagreement is a bug either way.

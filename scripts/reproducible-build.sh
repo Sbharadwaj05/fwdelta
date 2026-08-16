@@ -18,7 +18,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TARGET=x86_64-unknown-linux-musl
-BIN_PATH="release/soteria"
+BIN_PATH="release/fwdelta"
 
 # Every input that would otherwise vary between two builds of identical source.
 #
@@ -40,7 +40,7 @@ build() {
     # it a dependency could resolve differently between the two runs and the
     # comparison would be meaningless.
     if ! CARGO_TARGET_DIR="$dir" cargo build \
-        --release --locked --target "$TARGET" -p soteria-cli >"$dir.log" 2>&1; then
+        --release --locked --target "$TARGET" -p fwdelta-cli >"$dir.log" 2>&1; then
         echo "build failed:" >&2
         tail -20 "$dir.log" >&2
         exit 1

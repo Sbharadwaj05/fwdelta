@@ -1,4 +1,4 @@
-//! `soteria` — the command line interface.
+//! `fwdelta` — the command line interface.
 //!
 //! Two execution contexts, per blueprint section 03: locally before the push,
 //! and as a step in CI on the pull request. Both run the same code and differ
@@ -26,30 +26,30 @@ mod json;
 mod sha256;
 mod source;
 
-use json::Json;
-use soteria_engine::report::{ReportOptions, render_diff};
-use soteria_engine::{
+use fwdelta_engine::report::{ReportOptions, render_diff};
+use fwdelta_engine::{
     ChainModel, Field, IntervalSet, Layout, Region, SymbolTable, VarOrder, analyse, diff,
     enumerate, exact_cardinality, flow_count,
 };
-use soteria_engine::{
+use fwdelta_engine::{
     diff::{ChainDiff, Structural},
     enumerate::EnumOptions,
     render,
 };
-use soteria_ir::{Ruleset, set_to_prefixes};
-use soteria_policy::eval::Mentioned;
-use soteria_policy::{Outcome, Policy, Report};
+use fwdelta_ir::{Ruleset, set_to_prefixes};
+use fwdelta_policy::eval::Mentioned;
+use fwdelta_policy::{Outcome, Policy, Report};
+use json::Json;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str = "\
-soteria — semantic diff for firewall policy
+fwdelta — semantic diff for firewall policy
 
 USAGE
-  soteria diff --base <ref> --head <ref> [options]
-  soteria check <file> [options]
-  soteria version
+  fwdelta diff --base <ref> --head <ref> [options]
+  fwdelta check <file> [options]
+  fwdelta version
 
 DIFF OPTIONS
   --base <ref>       base ruleset: a file path, or a git revision with --path
@@ -81,7 +81,7 @@ fn main() {
     match run() {
         Ok(code) => std::process::exit(code),
         Err(e) => {
-            eprintln!("soteria: {e}");
+            eprintln!("fwdelta: {e}");
             std::process::exit(2);
         }
     }
@@ -185,20 +185,20 @@ fn run() -> Result<i32, String> {
         "diff" => cmd_diff(opts),
         "check" => cmd_check(opts),
         "version" => {
-            println!("soteria {VERSION}");
+            println!("fwdelta {VERSION}");
             Ok(0)
         }
         "-h" | "--help" | "help" => {
             print!("{USAGE}");
             Ok(0)
         }
-        other => Err(format!("unknown command `{other}`. Try `soteria --help`")),
+        other => Err(format!("unknown command `{other}`. Try `fwdelta --help`")),
     }
 }
 
 /// Parse a ruleset, turning a rejection into a message the caller can act on.
 fn parse(label: &str, text: &str) -> Result<Ruleset, String> {
-    let mut rs = soteria_nft::parse(label, text).map_err(|e| format!("\n{e}"))?;
+    let mut rs = fwdelta_nft::parse(label, text).map_err(|e| format!("\n{e}"))?;
     rs.label = label.to_string();
     Ok(rs)
 }
@@ -217,7 +217,7 @@ fn cmd_diff(o: Options) -> Result<i32, String> {
     let policy: Option<Policy> = match &o.assert_file {
         Some(path) => {
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-            Some(soteria_policy::parse::parse(&text).map_err(|e| format!("{path}: {e}"))?)
+            Some(fwdelta_policy::parse::parse(&text).map_err(|e| format!("{path}: {e}"))?)
         }
         None => None,
     };
@@ -278,7 +278,7 @@ fn cmd_diff(o: Options) -> Result<i32, String> {
         let head_models: Vec<ChainModel> =
             sections.iter().map(|(_, _, hm, _)| hm.clone()).collect();
         let mentioned = Mentioned::of(&[&base_rs, &head_rs]);
-        assertions = soteria_policy::evaluate(&layout, &syms, p, &head_models, &mentioned)
+        assertions = fwdelta_policy::evaluate(&layout, &syms, p, &head_models, &mentioned)
             .map_err(|e| e.to_string())?;
     }
 
@@ -369,17 +369,17 @@ fn render_intent(reports: &[Report], syms: &SymbolTable) -> String {
         // exactly backwards for reachability, where passing means a path exists.
         match &r.outcome {
             Outcome::Pass => match r.kind {
-                soteria_policy::Kind::Isolation => {
+                fwdelta_policy::Kind::Isolation => {
                     out.push_str(&format!("no path {}\n", r.summary))
                 }
-                soteria_policy::Kind::Reachability => {
+                fwdelta_policy::Kind::Reachability => {
                     out.push_str(&format!("all permitted {}\n", r.summary))
                 }
             },
             Outcome::Fail { counterexample } => {
                 let verb = match r.kind {
-                    soteria_policy::Kind::Isolation => "permitted",
-                    soteria_policy::Kind::Reachability => "denied",
+                    fwdelta_policy::Kind::Isolation => "permitted",
+                    fwdelta_policy::Kind::Reachability => "denied",
                 };
                 out.push_str(&format!("{} {verb}\n", counterexample.describe(syms)));
                 out.push_str(&format!(
@@ -482,7 +482,7 @@ fn cmd_check(o: Options) -> Result<i32, String> {
 // ------------------------------------------------------------------- json
 
 fn tool_json() -> Json {
-    Json::obj([("name", Json::str("soteria")), ("version", Json::str(VERSION))])
+    Json::obj([("name", Json::str("fwdelta")), ("version", Json::str(VERSION))])
 }
 
 /// Dimension terms for the machine-readable path.
@@ -550,7 +550,7 @@ fn delta_json(
     head: &ChainModel,
     set: &biodivine_lib_bdd::Bdd,
 ) -> Json {
-    let (cells, truncated) = soteria_engine::attribute(base, head, set, 4096);
+    let (cells, truncated) = fwdelta_engine::attribute(base, head, set, 4096);
     let mut entries = Vec::new();
     let mut incomplete = false;
     for cell in &cells {

@@ -235,7 +235,7 @@ mod tests {
     use super::*;
     use crate::accept::analyse;
     use crate::header::Layout;
-    use soteria_ir::{Action, Chain, Field, Hook, Match, Origin, SymbolTable};
+    use fwdelta_ir::{Action, Chain, Field, Hook, Match, Origin, SymbolTable};
 
     const TCP: u64 = 6;
 

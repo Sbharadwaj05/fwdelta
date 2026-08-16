@@ -40,6 +40,55 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "fwdelta-cli"
+version = "0.1.0"
+dependencies = [
+ "biodivine-lib-bdd",
+ "fwdelta-engine",
+ "fwdelta-ir",
+ "fwdelta-nft",
+ "fwdelta-policy",
+]
+
+[[package]]
+name = "fwdelta-engine"
+version = "0.1.0"
+dependencies = [
+ "biodivine-lib-bdd",
+ "fwdelta-ir",
+]
+
+[[package]]
+name = "fwdelta-ir"
+version = "0.1.0"
+
+[[package]]
+name = "fwdelta-kerneldiff"
+version = "0.1.0"
+dependencies = [
+ "fwdelta-engine",
+ "fwdelta-ir",
+ "fwdelta-nft",
+]
+
+[[package]]
+name = "fwdelta-nft"
+version = "0.1.0"
+dependencies = [
+ "fwdelta-ir",
+]
+
+[[package]]
+name = "fwdelta-policy"
+version = "0.1.0"
+dependencies = [
+ "biodivine-lib-bdd",
+ "fwdelta-engine",
+ "fwdelta-ir",
+ "toml",
+]
+
+[[package]]
 name = "fxhash"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -220,55 +269,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf41e0cfaf7226dca15e8197172c295a782857fcb97fad1808a166870dee75a3"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "soteria-cli"
-version = "0.1.0"
-dependencies = [
- "biodivine-lib-bdd",
- "soteria-engine",
- "soteria-ir",
- "soteria-nft",
- "soteria-policy",
-]
-
-[[package]]
-name = "soteria-engine"
-version = "0.1.0"
-dependencies = [
- "biodivine-lib-bdd",
- "soteria-ir",
-]
-
-[[package]]
-name = "soteria-ir"
-version = "0.1.0"
-
-[[package]]
-name = "soteria-kerneldiff"
-version = "0.1.0"
-dependencies = [
- "soteria-engine",
- "soteria-ir",
- "soteria-nft",
-]
-
-[[package]]
-name = "soteria-nft"
-version = "0.1.0"
-dependencies = [
- "soteria-ir",
-]
-
-[[package]]
-name = "soteria-policy"
-version = "0.1.0"
-dependencies = [
- "biodivine-lib-bdd",
- "soteria-engine",
- "soteria-ir",
- "toml",
 ]
 
 [[package]]

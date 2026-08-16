@@ -11,8 +11,8 @@ fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures").join(name)
 }
 
-fn soteria(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_soteria")).args(args).output().expect("run soteria")
+fn fwdelta(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_fwdelta")).args(args).output().expect("run fwdelta")
 }
 
 fn stdout(o: &Output) -> String {
@@ -30,7 +30,7 @@ fn head() -> String {
 #[test]
 fn a_ruleset_against_itself_has_no_delta() {
     let b = base();
-    let out = soteria(&["diff", "--base", &b, "--head", &b]);
+    let out = fwdelta(&["diff", "--base", &b, "--head", &b]);
     assert_eq!(out.status.code(), Some(0));
     let text = stdout(&out);
     assert_eq!(text.matches("  none\n").count(), 2, "{text}");
@@ -39,7 +39,7 @@ fn a_ruleset_against_itself_has_no_delta() {
 
 #[test]
 fn a_narrowing_edit_reports_lost_traffic_and_the_woken_rule() {
-    let out = soteria(&["diff", "--base", &base(), "--head", &head()]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", &head()]);
     let text = stdout(&out);
     assert!(text.contains("NEWLY BLOCKED"), "{text}");
     assert!(text.contains("now denied by rule 05"), "{text}");
@@ -51,19 +51,19 @@ fn a_narrowing_edit_reports_lost_traffic_and_the_woken_rule() {
 /// non-empty newly-blocked set is surfaced rather than made to block a merge.
 #[test]
 fn losing_traffic_only_fails_the_build_when_asked() {
-    let permissive = soteria(&["diff", "--base", &base(), "--head", &head()]);
+    let permissive = fwdelta(&["diff", "--base", &base(), "--head", &head()]);
     assert_eq!(permissive.status.code(), Some(0));
     assert!(stdout(&permissive).contains("does not block the build"));
 
     let strict =
-        soteria(&["diff", "--base", &base(), "--head", &head(), "--fail-on-newly-blocked"]);
+        fwdelta(&["diff", "--base", &base(), "--head", &head(), "--fail-on-newly-blocked"]);
     assert_eq!(strict.status.code(), Some(1));
 }
 
 /// A ruleset the tool cannot model must never produce a green build.
 #[test]
 fn an_unsupported_construct_exits_two() {
-    let dir = std::env::temp_dir().join("soteria-cli-test");
+    let dir = std::env::temp_dir().join("fwdelta-cli-test");
     std::fs::create_dir_all(&dir).unwrap();
     let bad = dir.join("conntrack.nft");
     std::fs::write(
@@ -72,7 +72,7 @@ fn an_unsupported_construct_exits_two() {
     )
     .unwrap();
 
-    let out = soteria(&["diff", "--base", &base(), "--head", bad.to_str().unwrap()]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", bad.to_str().unwrap()]);
     assert_eq!(out.status.code(), Some(2), "unsupported input must not exit 0 or 1");
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("connection tracking"), "{err}");
@@ -81,20 +81,20 @@ fn an_unsupported_construct_exits_two() {
 
 #[test]
 fn bad_arguments_exit_two() {
-    assert_eq!(soteria(&["diff", "--base", &base()]).status.code(), Some(2));
-    assert_eq!(soteria(&["frobnicate"]).status.code(), Some(2));
-    assert_eq!(soteria(&["diff", "--nonsense"]).status.code(), Some(2));
+    assert_eq!(fwdelta(&["diff", "--base", &base()]).status.code(), Some(2));
+    assert_eq!(fwdelta(&["frobnicate"]).status.code(), Some(2));
+    assert_eq!(fwdelta(&["diff", "--nonsense"]).status.code(), Some(2));
     assert_eq!(
-        soteria(&["diff", "--base", &base(), "--head", &head(), "--format", "yaml"]).status.code(),
+        fwdelta(&["diff", "--base", &base(), "--head", &head(), "--format", "yaml"]).status.code(),
         Some(2)
     );
 }
 
 #[test]
 fn version_and_help_succeed() {
-    assert_eq!(soteria(&["version"]).status.code(), Some(0));
-    assert!(stdout(&soteria(&["version"])).starts_with("soteria "));
-    assert!(stdout(&soteria(&["--help"])).contains("EXIT CODES"));
+    assert_eq!(fwdelta(&["version"]).status.code(), Some(0));
+    assert!(stdout(&fwdelta(&["version"])).starts_with("fwdelta "));
+    assert!(stdout(&fwdelta(&["--help"])).contains("EXIT CODES"));
 }
 
 /// Delimiter-balance scan that respects strings and escapes. Enough to catch a
@@ -131,7 +131,7 @@ fn well_formed(s: &str) -> bool {
 
 #[test]
 fn json_output_is_well_formed_and_complete() {
-    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--format", "json"]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", &head(), "--format", "json"]);
     assert_eq!(out.status.code(), Some(0));
     let text = stdout(&out);
 
@@ -158,7 +158,7 @@ fn json_output_is_well_formed_and_complete() {
 /// rounding of the figure the JSON path exists to preserve.
 #[test]
 fn large_counts_are_quoted_in_json() {
-    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--format", "json"]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", &head(), "--format", "json"]);
     let text = stdout(&out);
     let line = text.lines().find(|l| l.contains("\"packets\"")).expect("a packets field");
     let value = line.split(':').nth(1).unwrap().trim().trim_end_matches(',');
@@ -168,7 +168,7 @@ fn large_counts_are_quoted_in_json() {
 #[test]
 fn json_and_text_agree_on_the_exit_code() {
     for format in ["text", "json"] {
-        let out = soteria(&[
+        let out = fwdelta(&[
             "diff",
             "--base",
             &base(),
@@ -184,7 +184,7 @@ fn json_and_text_agree_on_the_exit_code() {
 
 #[test]
 fn check_reports_dead_rules_with_their_source_position() {
-    let out = soteria(&["check", &base(), "--verify"]);
+    let out = fwdelta(&["check", &base(), "--verify"]);
     assert_eq!(out.status.code(), Some(0));
     let text = stdout(&out);
     // Rule 5 (the modbus drop) is dead in the base revision: rule 4 already
@@ -196,13 +196,13 @@ fn check_reports_dead_rules_with_their_source_position() {
 
 #[test]
 fn verify_runs_the_engine_self_checks() {
-    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--verify"]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", &head(), "--verify"]);
     assert_eq!(out.status.code(), Some(0));
 }
 
 #[test]
 fn selecting_a_missing_chain_is_an_error_not_an_empty_report() {
-    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--chain", "nosuch"]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", &head(), "--chain", "nosuch"]);
     assert_eq!(out.status.code(), Some(2));
 }
 
@@ -213,7 +213,7 @@ fn policy_file() -> String {
 }
 
 fn write_temp(name: &str, body: &str) -> String {
-    let dir = std::env::temp_dir().join("soteria-cli-test");
+    let dir = std::env::temp_dir().join("fwdelta-cli-test");
     std::fs::create_dir_all(&dir).unwrap();
     let p = dir.join(name);
     std::fs::write(&p, body).unwrap();
@@ -222,7 +222,7 @@ fn write_temp(name: &str, body: &str) -> String {
 
 #[test]
 fn assertions_are_reported_with_kind_appropriate_wording() {
-    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--assert", &policy_file()]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", &head(), "--assert", &policy_file()]);
     let text = stdout(&out);
     assert!(text.contains("INTENT"), "{text}");
     // Isolation that fails names the packet that got through.
@@ -237,7 +237,7 @@ fn assertions_are_reported_with_kind_appropriate_wording() {
 
 #[test]
 fn a_failed_assertion_fails_the_build() {
-    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--assert", &policy_file()]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", &head(), "--assert", &policy_file()]);
     assert_eq!(out.status.code(), Some(1));
 }
 
@@ -259,7 +259,7 @@ fn an_assertion_nothing_decides_is_vacuous_not_passing() {
     let doc = "[zones]\nvlan_corp = [\"10.1.0.0/16\"]\nvlan_ot = [\"10.50.0.0/16\"]\n\n[[assert]]\nname=\"ot-cell-isolation\"\nkind=\"isolation\"\nfrom=\"vlan_corp\"\nto=\"vlan_ot\"\nproto=\"tcp\"\ndport=502\n";
     let path = write_temp("typo.policy.toml", doc);
 
-    let out = soteria(&["diff", "--base", &rules, "--head", &rules, "--assert", &path]);
+    let out = fwdelta(&["diff", "--base", &rules, "--head", &rules, "--assert", &path]);
     let text = stdout(&out);
 
     assert!(text.contains("VACUOUS"), "a zone nothing decides must not pass:\n{text}");
@@ -280,7 +280,7 @@ fn the_same_assertion_with_the_right_zone_is_a_real_pass() {
     let doc = "[zones]\nvlan_corp = [\"10.1.0.0/16\"]\nvlan_ot = [\"10.5.0.0/16\"]\n\n[[assert]]\nname=\"ot-cell-isolation\"\nkind=\"isolation\"\nfrom=\"vlan_corp\"\nto=\"vlan_ot\"\nproto=\"tcp\"\ndport=502\n";
     let path = write_temp("right.policy.toml", doc);
 
-    let out = soteria(&["diff", "--base", &rules, "--head", &rules, "--assert", &path]);
+    let out = fwdelta(&["diff", "--base", &rules, "--head", &rules, "--assert", &path]);
     let text = stdout(&out);
     assert!(text.contains("PASS    ot-cell-isolation"), "{text}");
     assert!(!text.contains("VACUOUS"), "{text}");
@@ -293,10 +293,10 @@ fn vacuous_can_be_downgraded_deliberately() {
     let doc = "[zones]\nz = [\"10.50.0.0/16\"]\n\n[[assert]]\nname=\"x\"\nkind=\"isolation\"\nto=\"z\"\nproto=\"tcp\"\ndport=502\n";
     let path = write_temp("vacuous.policy.toml", doc);
 
-    let strict = soteria(&["diff", "--base", &rules, "--head", &rules, "--assert", &path]);
+    let strict = fwdelta(&["diff", "--base", &rules, "--head", &rules, "--assert", &path]);
     assert_eq!(strict.status.code(), Some(1));
 
-    let lenient = soteria(&[
+    let lenient = fwdelta(&[
         "diff",
         "--base",
         &rules,
@@ -317,7 +317,7 @@ fn an_interface_named_only_in_an_assertion_still_resolves() {
     // wg0 appears in neither ruleset.
     let doc = "[zones]\nz = [\"10.5.0.0/16\"]\n\n[[assert]]\nname=\"x\"\nkind=\"isolation\"\nto=\"z\"\niif=\"wg0\"\nproto=\"tcp\"\ndport=502\n";
     let path = write_temp("wg0.policy.toml", doc);
-    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--assert", &path]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", &head(), "--assert", &path]);
     let text = stdout(&out);
     // The rules leave iif unconstrained, so they do decide wg0 traffic: this is
     // a real result, not "describes no packet".
@@ -331,7 +331,7 @@ fn a_bad_assertion_file_exits_two() {
         "bad.policy.toml",
         "[[assert]]\nname=\"x\"\nkind=\"isolation\"\nfrom=\"nosuchzone\"\n",
     );
-    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--assert", &path]);
+    let out = fwdelta(&["diff", "--base", &base(), "--head", &head(), "--assert", &path]);
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("no zone named `nosuchzone`"));
 }
@@ -341,7 +341,7 @@ fn a_bad_assertion_file_exits_two() {
 #[test]
 fn the_attestation_carries_the_model_boundaries() {
     let dest = write_temp("att.json", "");
-    let out = soteria(&[
+    let out = fwdelta(&[
         "diff",
         "--base",
         &base(),
@@ -376,7 +376,7 @@ fn the_attestation_carries_the_model_boundaries() {
 #[test]
 fn attestation_digests_match_the_files() {
     let dest = write_temp("att2.json", "");
-    soteria(&["diff", "--base", &base(), "--head", &head(), "--attest", &dest]);
+    fwdelta(&["diff", "--base", &base(), "--head", &head(), "--attest", &dest]);
     let text = std::fs::read_to_string(&dest).unwrap();
 
     let expected = Command::new("sha256sum").arg(head()).output().expect("sha256sum");

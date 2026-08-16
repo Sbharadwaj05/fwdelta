@@ -9,7 +9,7 @@
 //! Every rule carries a `counter` and a comment naming its position, which is
 //! how the kernel's verdict is read back.
 
-use soteria_ir::{Action, Chain, Field, IntervalSet, Rule, set_to_prefixes};
+use fwdelta_ir::{Action, Chain, Field, IntervalSet, Rule, set_to_prefixes};
 
 fn ipv4(v: u64) -> String {
     format!("{}.{}.{}.{}", (v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff)
@@ -58,7 +58,7 @@ fn proto_keyword(v: u64) -> &'static str {
 pub fn rule(r: &Rule) -> Option<String> {
     let mut parts = Vec::new();
 
-    if let soteria_ir::IfMatch::OneOf(names) = &r.matches.iif {
+    if let fwdelta_ir::IfMatch::OneOf(names) = &r.matches.iif {
         let list: Vec<String> = names.iter().map(|n| format!("\"{n}\"")).collect();
         parts.push(match list.len() {
             1 => format!("iifname {}", list[0]),

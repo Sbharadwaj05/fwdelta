@@ -43,10 +43,10 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use coverage::Coverage;
-use soteria_engine::{ChainModel, Layout, VarOrder, analyse};
-use soteria_ir::{Action, Chain, Field, Hook, IfMatch, Match, Origin, SymbolTable};
+use fwdelta_engine::{ChainModel, Layout, VarOrder, analyse};
+use fwdelta_ir::{Action, Chain, Field, Hook, IfMatch, Match, Origin, SymbolTable};
 
-const TABLE: &str = "soteria_diff";
+const TABLE: &str = "fwdelta_diff";
 
 /// Probes arrive on one of these two. Varying the input interface needs traffic
 /// that genuinely crosses a link, which is why a peer namespace exists at all.
@@ -196,7 +196,7 @@ fn load_ruleset(text: &str) -> Result<(), String> {
 /// prefilter can decide what the measured chain is allowed to see without
 /// altering the verdict the measured chain produces.
 fn prefilter_table() -> String {
-    "table ip soteria_pre {\n  chain pre {\n    \
+    "table ip fwdelta_pre {\n  chain pre {\n    \
      type filter hook input priority -100; policy accept;\n  }\n}\n"
         .to_string()
 }
@@ -230,9 +230,9 @@ fn prefilter_for(p: &Packet) -> String {
         m.push_str(&format!(" {l4} sport {sp} {l4} dport {dp}"));
     }
     format!(
-        "flush chain ip soteria_pre pre\n\
-         add rule ip soteria_pre pre {m} accept\n\
-         add rule ip soteria_pre pre drop\n"
+        "flush chain ip fwdelta_pre pre\n\
+         add rule ip fwdelta_pre pre {m} accept\n\
+         add rule ip fwdelta_pre pre drop\n"
     )
 }
 
@@ -349,7 +349,7 @@ fn probe(p: &Packet, chain: &Chain, peer: &Peer) -> Result<Verdict, String> {
                     let sender = UdpSocket::bind((src.as_str(), sp))
                         .map_err(|e| format!("bind sender {src}:{sp}: {e}"))?;
                     sender
-                        .send_to(b"soteria", (dst.as_str(), dp))
+                        .send_to(b"fwdelta", (dst.as_str(), dp))
                         .map_err(|e| format!("send: {e}"))?;
                 }
                 Path::Wire => {
@@ -461,8 +461,8 @@ fn model_verdict(
     let cells = model.attribute(&point);
     let decider = match cells.as_slice() {
         [] => None,
-        [(soteria_engine::Decider::Rule(n), _)] => Some(*n),
-        [(soteria_engine::Decider::Policy, _)] => None,
+        [(fwdelta_engine::Decider::Rule(n), _)] => Some(*n),
+        [(fwdelta_engine::Decider::Policy, _)] => None,
         _ => return Err(format!("the model attributes {p} to {} different deciders", cells.len())),
     };
     Ok(Verdict { decider, permitted: all_permitted })
@@ -799,7 +799,7 @@ fn run_round(args: &Args, round: usize, peer: &Peer, cov: &mut Coverage) -> Resu
 /// Emit the chain, parse it back, and require the IR to survive the trip.
 fn roundtrip(chain: &Chain) -> Result<(), String> {
     let text = emit::chain_with(TABLE, chain, false).ok_or("emitter cannot express this chain")?;
-    let reparsed = soteria_nft::parse("roundtrip.nft", &text)
+    let reparsed = fwdelta_nft::parse("roundtrip.nft", &text)
         .map_err(|e| format!("frontend rejected emitted nftables:\n{e}\n{text}"))?;
 
     let [back] = reparsed.chains.as_slice() else {
@@ -876,7 +876,7 @@ fn send_udp_mode(argv: &[String]) -> ! {
     };
     let bind = (src.as_str(), sport.parse::<u16>().unwrap_or(0));
     let to = (dst.as_str(), dport.parse::<u16>().unwrap_or(0));
-    match UdpSocket::bind(bind).and_then(|s| s.send_to(b"soteria", to)) {
+    match UdpSocket::bind(bind).and_then(|s| s.send_to(b"fwdelta", to)) {
         Ok(_) => std::process::exit(0),
         Err(e) => {
             eprintln!("send failed: {e}");
@@ -891,7 +891,7 @@ fn main() {
         send_udp_mode(&raw[2..]);
     }
 
-    if std::env::var_os("SOTERIA_KERNELDIFF_INNER").is_none() {
+    if std::env::var_os("FWDELTA_KERNELDIFF_INNER").is_none() {
         let exe = match std::env::current_exe() {
             Ok(e) => e,
             Err(e) => {
@@ -903,7 +903,7 @@ fn main() {
             .args(["-Ur", "-n"])
             .arg(exe)
             .args(std::env::args().skip(1))
-            .env("SOTERIA_KERNELDIFF_INNER", "1")
+            .env("FWDELTA_KERNELDIFF_INNER", "1")
             .status();
         match status {
             Ok(s) => std::process::exit(s.code().unwrap_or(1)),
@@ -916,7 +916,7 @@ fn main() {
     }
 
     let args = parse_args();
-    println!("SOTERIA KERNEL DIFFERENTIAL");
+    println!("FWDELTA KERNEL DIFFERENTIAL");
     println!(
         "{} rounds x {} rules x {} packets, seed {:#x}\n",
         args.rounds, args.rules, args.packets, args.seed

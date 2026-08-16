@@ -9,7 +9,7 @@
 //!   eye can scan down a column instead of reading each line.
 
 use crate::enumerate::Enumeration;
-use soteria_ir::{Field, IntervalSet, SymbolTable, set_to_prefixes};
+use fwdelta_ir::{Field, IntervalSet, SymbolTable, set_to_prefixes};
 
 use crate::region::Region;
 

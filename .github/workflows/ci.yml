@@ -33,8 +33,8 @@ jobs:
       # benchmark asserts the partition invariant. Both are cheap; running them
       # here means a regression in either is a failed build, not a surprise the
       # next time someone happens to run an example.
-      - run: cargo run --release -p soteria-engine --example enumerator_gate
-      - run: cargo run --release -p soteria-engine --example thousand_rules
+      - run: cargo run --release -p fwdelta-engine --example enumerator_gate
+      - run: cargo run --release -p fwdelta-engine --example thousand_rules
 
   supply-chain:
     runs-on: ubuntu-24.04
@@ -62,7 +62,7 @@ jobs:
       # file has no dynamic dependencies.
       - name: It must be statically linked
         run: |
-          BIN=target/x86_64-unknown-linux-musl/release/soteria
+          BIN=target/x86_64-unknown-linux-musl/release/fwdelta
           file "$BIN"
           file "$BIN" | grep -q 'static' || { echo "not statically linked"; exit 1; }
           ldd "$BIN" 2>&1 | grep -q 'not a dynamic executable\|statically linked'
@@ -74,7 +74,7 @@ jobs:
       - name: It must issue no network syscalls
         run: |
           ./scripts/syscall-audit.sh \
-            target/x86_64-unknown-linux-musl/release/soteria \
+            target/x86_64-unknown-linux-musl/release/fwdelta \
             diff --base fixtures/cell-gateway-base.nft \
                  --head fixtures/cell-gateway-head.nft \
                  --assert fixtures/cell-gateway.policy.toml \
@@ -104,10 +104,10 @@ jobs:
       # to build. The final stage is scratch, so a successful run of the binary
       # inside it also demonstrates the static link.
       - name: Build the image
-        run: docker build -f Containerfile -t soteria:ci .
+        run: docker build -f Containerfile -t fwdelta:ci .
       - name: It must run with nothing else in the image
         run: |
-          docker run --rm -v "$PWD/fixtures:/f:ro" soteria:ci \
+          docker run --rm -v "$PWD/fixtures:/f:ro" fwdelta:ci \
             diff --base /f/cell-gateway-base.nft --head /f/cell-gateway-head.nft \
             || [ $? -eq 1 ]
 
@@ -135,15 +135,15 @@ jobs:
       - name: Allow unprivileged user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
-      - run: cargo build --release -p soteria-kerneldiff
+      - run: cargo build --release -p fwdelta-kerneldiff
 
       # A fault that goes undetected means the harness cannot see the dimension
       # it breaks, and agreement below would prove nothing.
       - name: The harness must be able to fail
-        run: ./target/release/soteria-kerneldiff --self-test --rules 30 --packets 30 --rounds 2
+        run: ./target/release/fwdelta-kerneldiff --self-test --rules 30 --packets 30 --rounds 2
 
       - name: The model must agree with the kernel
-        run: ./target/release/soteria-kerneldiff --rules 50 --packets 120 --rounds 4
+        run: ./target/release/fwdelta-kerneldiff --rules 50 --packets 120 --rounds 4
 
       # The differential harness cannot find matches the kernel silently
       # ignores, because it generates rulesets from the model under test. This

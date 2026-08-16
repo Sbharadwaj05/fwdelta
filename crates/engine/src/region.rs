@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use biodivine_lib_bdd::Bdd;
 
-use soteria_ir::{Field, IntervalSet};
+use fwdelta_ir::{Field, IntervalSet};
 
 use crate::header::Layout;
 

@@ -7,7 +7,7 @@
 //! "now denied by rule 22" says where to go and look, and the partition makes
 //! both exact rather than guesswork.
 
-use soteria_ir::SymbolTable;
+use fwdelta_ir::SymbolTable;
 
 use crate::accept::{ChainModel, Decider};
 use crate::diff::{ChainDiff, Structural, attribute};
@@ -276,7 +276,7 @@ mod tests {
     use super::*;
     use crate::accept::analyse;
     use crate::diff::diff;
-    use soteria_ir::{Action, Chain, Field, Hook, Match, Origin};
+    use fwdelta_ir::{Action, Chain, Field, Hook, Match, Origin};
 
     const TCP: u64 = 6;
 

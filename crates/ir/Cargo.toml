@@ -1,5 +1,5 @@
 [package]
-name = "soteria-ir"
+name = "fwdelta-ir"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

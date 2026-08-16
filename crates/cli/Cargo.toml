@@ -1,5 +1,5 @@
 [package]
-name = "soteria-cli"
+name = "fwdelta-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,14 +8,14 @@ authors.workspace = true
 description = "Semantic diff and formal reachability analysis for firewall policy"
 
 [[bin]]
-name = "soteria"
+name = "fwdelta"
 path = "src/main.rs"
 
 [dependencies]
-soteria-ir = { workspace = true }
-soteria-engine = { workspace = true }
-soteria-nft = { workspace = true }
-soteria-policy = { workspace = true }
+fwdelta-ir = { workspace = true }
+fwdelta-engine = { workspace = true }
+fwdelta-nft = { workspace = true }
+fwdelta-policy = { workspace = true }
 biodivine-lib-bdd = { workspace = true }
 
 [lints.rust]

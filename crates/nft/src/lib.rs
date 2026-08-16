@@ -1,6 +1,6 @@
 //! nftables frontend.
 //!
-//! Reads a documented subset of nftables and produces `soteria-ir`. The subset
+//! Reads a documented subset of nftables and produces `fwdelta-ir`. The subset
 //! is published as `docs/NFTABLES-SUBSET.md` and everything outside it is a hard
 //! error naming the file, line and column.
 //!

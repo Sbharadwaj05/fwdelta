@@ -41,7 +41,7 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use biodivine_lib_bdd::Bdd;
-use soteria_ir::{Action, Chain, Hook, Match, SymbolTable};
+use fwdelta_ir::{Action, Chain, Hook, Match, SymbolTable};
 
 use crate::header::Layout;
 
@@ -300,7 +300,7 @@ pub fn analyse(layout: &Layout, syms: &SymbolTable, chain: &Chain) -> ChainModel
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soteria_ir::{Field, IfMatch, Match, Origin};
+    use fwdelta_ir::{Field, IfMatch, Match, Origin};
 
     const TCP: u64 = 6;
 

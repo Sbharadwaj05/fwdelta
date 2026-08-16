@@ -20,12 +20,17 @@
 //! travels with the evidence rather than living in documentation the auditor
 //! may never see.
 
-use soteria_policy::{Kind, Outcome, Report};
+use fwdelta_policy::{Kind, Outcome, Report};
 
 use crate::json::Json;
 use crate::sha256;
 
-pub const PREDICATE_TYPE: &str = "https://soteria.tools/attestation/policy-diff/v1";
+// Namespaced to the repository rather than to a domain this project does
+// not own. fwdelta.com belongs to an unrelated company; a predicateType
+// pointing at someone else's domain would be wrong even though the URI
+// never has to resolve.
+pub const PREDICATE_TYPE: &str =
+    "https://github.com/Sbharadwaj05/fwdelta/attestation/policy-diff/v1";
 pub const STATEMENT_TYPE: &str = "https://in-toto.io/Statement/v1";
 
 /// One analysed input.
@@ -51,7 +56,7 @@ impl Input {
 /// having to find the documentation.
 fn model_boundaries() -> Json {
     Json::obj([
-        ("headerBits", Json::Num(u64::from(soteria_engine::HEADER_BITS))),
+        ("headerBits", Json::Num(u64::from(fwdelta_engine::HEADER_BITS))),
         (
             "dimensions",
             Json::arr(
@@ -206,7 +211,7 @@ pub fn statement(
         (
             "tool".to_string(),
             Json::obj([
-                ("name", Json::str("soteria")),
+                ("name", Json::str("fwdelta")),
                 ("version", Json::str(env!("CARGO_PKG_VERSION"))),
             ]),
         ),
@@ -230,7 +235,7 @@ pub fn statement(
             "signing".to_string(),
             Json::str(
                 "this predicate is unsigned by design; sign it detached with your own tooling. \
-                 Soteria holds no key material.",
+                 fwdelta holds no key material.",
             ),
         ),
     ];

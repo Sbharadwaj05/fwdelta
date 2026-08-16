@@ -6,8 +6,8 @@
 //! cannot have is a rule that was quietly dropped, leaving a model that
 //! confidently disagrees with the kernel.
 
-use soteria_ir::{Action, Field, Hook, IfMatch};
-use soteria_nft::{Cause, parse};
+use fwdelta_ir::{Action, Field, Hook, IfMatch};
+use fwdelta_nft::{Cause, parse};
 
 const GATEWAY: &str = r#"
 # Cell gateway, revision under review.

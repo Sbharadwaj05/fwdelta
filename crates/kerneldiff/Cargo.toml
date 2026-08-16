@@ -1,21 +1,21 @@
 [package]
-name = "soteria-kerneldiff"
+name = "fwdelta-kerneldiff"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Differential testing of the Soteria model against the Linux kernel"
+description = "Differential testing of the fwdelta model against the Linux kernel"
 publish = false
 
 [[bin]]
-name = "soteria-kerneldiff"
+name = "fwdelta-kerneldiff"
 path = "src/main.rs"
 
 [dependencies]
-soteria-ir = { workspace = true }
-soteria-engine = { workspace = true }
-soteria-nft = { workspace = true }
+fwdelta-ir = { workspace = true }
+fwdelta-engine = { workspace = true }
+fwdelta-nft = { workspace = true }
 
 [lints.rust]
 unsafe_code = "forbid"

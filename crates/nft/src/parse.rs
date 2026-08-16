@@ -10,7 +10,7 @@
 //! * A port match must pin a protocol that has ports (SEMANTICS §4.2).
 //! * A rule whose predicate can never hold is a typo, not a rule.
 
-use soteria_ir::{Action, Chain, Field, Hook, IfMatch, IntervalSet, Match, Origin, Ruleset};
+use fwdelta_ir::{Action, Chain, Field, Hook, IfMatch, IntervalSet, Match, Origin, Ruleset};
 use std::collections::BTreeSet;
 
 use crate::error::{Cause, ParseError};

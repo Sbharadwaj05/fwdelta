@@ -7,7 +7,7 @@
 //! it, which you can paste into a test".
 
 use biodivine_lib_bdd::Bdd;
-use soteria_ir::{Field, SymbolTable};
+use fwdelta_ir::{Field, SymbolTable};
 
 use crate::header::Layout;
 

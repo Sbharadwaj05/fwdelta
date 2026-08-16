@@ -66,7 +66,7 @@ keeps rejecting elsewhere.
 That is what the counters measure, and it is what catches the silently-dead-rule
 class.
 
-**It does not establish:** that Soteria's model of an applied match agrees with
+**It does not establish:** that fwdelta's model of an applied match agrees with
 the kernel. That is the differential harness's job, and the harness runs on the
 input hook only.
 

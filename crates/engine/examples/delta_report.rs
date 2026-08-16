@@ -4,11 +4,11 @@
 //! kind that looks harmless in a unified diff: one source range is narrowed from
 //! a /8 to a /16, on the assumption that nothing outside 10.0/16 was using it.
 //!
-//! Run with: `cargo run --release -p soteria-engine --example delta_report`
+//! Run with: `cargo run --release -p fwdelta-engine --example delta_report`
 
-use soteria_engine::report::{ReportOptions, render_diff};
-use soteria_engine::{Field, Layout, VarOrder, analyse, diff};
-use soteria_ir::{Action, Chain, Hook, IfMatch, Match, Origin, Ruleset, shared_symbols};
+use fwdelta_engine::report::{ReportOptions, render_diff};
+use fwdelta_engine::{Field, Layout, VarOrder, analyse, diff};
+use fwdelta_ir::{Action, Chain, Hook, IfMatch, Match, Origin, Ruleset, shared_symbols};
 
 fn ip(a: u8, b: u8, c: u8, d: u8) -> u64 {
     ((a as u64) << 24) | ((b as u64) << 16) | ((c as u64) << 8) | d as u64

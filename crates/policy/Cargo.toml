@@ -1,15 +1,15 @@
 [package]
-name = "soteria-policy"
+name = "fwdelta-policy"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Intent assertions and zone vocabulary for Soteria"
+description = "Intent assertions and zone vocabulary for fwdelta"
 
 [dependencies]
-soteria-ir = { workspace = true }
-soteria-engine = { workspace = true }
+fwdelta-ir = { workspace = true }
+fwdelta-engine = { workspace = true }
 toml = { workspace = true }
 biodivine-lib-bdd = { workspace = true }
 

@@ -4,13 +4,13 @@
 //! shape that a real firewall edit produces. The question the output has to
 //! answer in five seconds is "what changed".
 //!
-//! Run with: `cargo run -p soteria-engine --example enumerator_gate`
+//! Run with: `cargo run -p fwdelta-engine --example enumerator_gate`
 
 use std::time::Instant;
 
 use biodivine_lib_bdd::Bdd;
-use soteria_engine::render::{self, Style};
-use soteria_engine::{EnumOptions, Field, Layout, SymbolTable, VarOrder, enumerate};
+use fwdelta_engine::render::{self, Style};
+use fwdelta_engine::{EnumOptions, Field, Layout, SymbolTable, VarOrder, enumerate};
 
 fn ip(a: u8, b: u8, c: u8, d: u8) -> u64 {
     ((a as u64) << 24) | ((b as u64) << 16) | ((c as u64) << 8) | d as u64
@@ -103,7 +103,7 @@ fn main() {
     let layout = Layout::new(VarOrder::AddrInterleaved);
     let l = &layout;
 
-    println!("SOTERIA ENUMERATOR GATE");
+    println!("FWDELTA ENUMERATOR GATE");
     println!("120-bit header space, variable order {:?}", l.order());
 
     // 1. A single host and port behind a source prefix. The commonest delta of
