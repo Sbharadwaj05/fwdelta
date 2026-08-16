@@ -722,6 +722,13 @@ fn run_round(
     let Some(text) = emit::chain(TABLE, &chain) else {
         return Err("generator produced a rule the emitter cannot express".into());
     };
+
+    // Blueprint M1: the frontend must round-trip real rulesets. The generator
+    // produces IR, the emitter writes nftables, and the frontend reads it back;
+    // the two IRs have to agree. Emitter and parser are independent code with
+    // opposite directions, so a shared misunderstanding of the syntax cannot
+    // cancel itself out here the way it could if one were built from the other.
+    roundtrip(&chain)?;
     sh("nft", &["flush", "ruleset"])?;
     load_ruleset(&prefilter_table())?;
     load_ruleset(&text)?;
@@ -791,6 +798,43 @@ fn run_round(
         checked += 1;
     }
     Ok(checked)
+}
+
+/// Emit the chain, parse it back, and require the IR to survive the trip.
+fn roundtrip(chain: &Chain) -> Result<(), String> {
+    let text = emit::chain_with(TABLE, chain, false)
+        .ok_or("emitter cannot express this chain")?;
+    let reparsed = soteria_nft::parse("roundtrip.nft", &text)
+        .map_err(|e| format!("frontend rejected emitted nftables:\n{e}\n{text}"))?;
+
+    let [back] = reparsed.chains.as_slice() else {
+        return Err(format!("expected one chain back, got {}", reparsed.chains.len()));
+    };
+    if back.policy != chain.policy || back.hook != chain.hook {
+        return Err(format!(
+            "chain header changed: {:?}/{:?} became {:?}/{:?}",
+            chain.hook, chain.policy, back.hook, back.policy
+        ));
+    }
+    if back.rules.len() != chain.rules.len() {
+        return Err(format!(
+            "{} rules went out, {} came back",
+            chain.rules.len(),
+            back.rules.len()
+        ));
+    }
+    for (before, after) in chain.rules.iter().zip(&back.rules) {
+        if before.action != after.action {
+            return Err(format!("rule {}: verdict changed", before.number));
+        }
+        if before.matches != after.matches {
+            return Err(format!(
+                "rule {}: predicate changed across the round trip\n  before {:?}\n  after  {:?}",
+                before.number, before.matches, after.matches
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Run every fault and require each to be detected.

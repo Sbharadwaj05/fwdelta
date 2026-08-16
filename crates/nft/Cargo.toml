@@ -1,21 +1,14 @@
 [package]
-name = "soteria-kerneldiff"
+name = "soteria-nft"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Differential testing of the Soteria model against the Linux kernel"
-publish = false
-
-[[bin]]
-name = "soteria-kerneldiff"
-path = "src/main.rs"
+description = "nftables frontend producing the Soteria intermediate representation"
 
 [dependencies]
 soteria-ir = { workspace = true }
-soteria-engine = { workspace = true }
-soteria-nft = { workspace = true }
 
 [lints.rust]
 unsafe_code = "forbid"

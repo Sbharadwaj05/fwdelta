@@ -115,6 +115,13 @@ pub fn rule(r: &Rule) -> Option<String> {
 
 /// Render a whole chain as a loadable ruleset.
 pub fn chain(table: &str, c: &Chain) -> Option<String> {
+    chain_with(table, c, true)
+}
+
+/// `sentinel` adds the verdict-less counter the harness polls on. It is a
+/// harness artifact and not valid frontend input, so the round-trip check
+/// asks for the ruleset without it.
+pub fn chain_with(table: &str, c: &Chain, sentinel: bool) -> Option<String> {
     let policy = match c.policy {
         Action::Accept => "accept",
         _ => "drop",
@@ -133,7 +140,9 @@ pub fn chain(table: &str, c: &Chain) -> Option<String> {
     // semantically, and it makes "the policy decided this" an observable event
     // rather than an absence. Without it, no-counter-moved is ambiguous between
     // "policy" and "the packet has not arrived yet", and the harness cannot poll.
-    out.push_str("    counter comment \"r0\"\n");
+    if sentinel {
+        out.push_str("    counter comment \"r0\"\n");
+    }
     out.push_str("  }\n}\n");
     Some(out)
 }

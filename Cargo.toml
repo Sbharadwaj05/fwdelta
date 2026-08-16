@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/ir", "crates/engine", "crates/kerneldiff"]
+members = ["crates/ir", "crates/engine", "crates/nft", "crates/kerneldiff"]
 
 [workspace.package]
 version = "0.1.0"
@@ -14,6 +14,7 @@ description = "Semantic diff and formal reachability analysis for firewall polic
 biodivine-lib-bdd = "0.6.3"
 soteria-ir = { path = "crates/ir", version = "0.1.0" }
 soteria-engine = { path = "crates/engine", version = "0.1.0" }
+soteria-nft = { path = "crates/nft", version = "0.1.0" }
 
 [profile.release]
 opt-level = 3
