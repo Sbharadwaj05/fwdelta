@@ -54,6 +54,34 @@ STRUCTURAL
 
 One line changed in the file. Three rules changed behaviour.
 
+### HTML reports
+
+`--format html` writes one file with everything in it: all CSS inline, all data
+in the markup, no scripts at all. No `<script src>`, no `<link href>`, no
+webfonts, no remote images, no `fetch`. It opens from `file://` on a machine
+with no network, which is the point — a report about an air-gapped network's
+firewall is not much use if reading it needs a CDN, and one that phones home
+when opened is an exfiltration path for a document describing exactly where the
+trust boundaries are.
+
+CI greps the generated file for every one of those patterns and runs the
+syscall audit over an HTML run, so this path is covered by the same air-gap gate
+as everything else.
+
+[![Example report](docs/images/report.png)](examples/cell-gateway-report.html)
+
+*[examples/cell-gateway-report.html](examples/cell-gateway-report.html),
+generated from the fixtures in this repository. The model boundaries are on the
+page rather than in a footnote: anyone reading a report should be able to see
+what the analysis did not cover without going to find the documentation.*
+
+The text and HTML renderers are two pure functions of one `DiffReport`, not two
+formatting paths. Ordering by breadth, hoisting constant columns, deriving
+omission from the union rather than by summing, attributing on both sides — all
+of that happens once, in the build step. A test asserts the two agree on the set
+of findings and on every count, because a reviewer comparing an HTML report
+against the terminal would otherwise have no way to tell which one was lying.
+
 ## What it does not do
 
 Stated as hard boundaries, because each is a legitimate problem and each is
@@ -169,6 +197,10 @@ fwdelta diff --base main --head HEAD --path cell-gateway.nft
 
 # machine-readable, untruncated, counts as strings so 2^120 survives
 fwdelta diff --base main --head HEAD --path cell-gateway.nft --format json
+
+# a single self-contained HTML file, for attaching to a review
+fwdelta diff --base main --head HEAD --path cell-gateway.nft \
+             --format html --out delta.html
 
 # what is dead in a single ruleset
 fwdelta check cell-gateway.nft

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fwdelta: fixtures/cell-gateway-base.nft .. fixtures/cell-gateway-head.nft</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #16181d; --dim: #5c6370; --line: #e2e5ea;
+  --panel: #f6f7f9; --accent: #b4341f; --ok: #1f7a3f; --warn: #8a6d00;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a; --fg: #e6e8ec; --dim: #9098a6; --line: #2a2e36;
+    --panel: #1b1e24; --accent: #ef6a52; --ok: #5fca86; --warn: #d7b34a;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 1.25rem 4rem; background: var(--bg); color: var(--fg);
+  font: 14px/1.55 var(--mono); -webkit-text-size-adjust: 100%;
+}
+main { max-width: 76rem; margin: 0 auto; }
+h1 { font-size: 1.05rem; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 .25rem; }
+h2 {
+  font-size: .82rem; letter-spacing: .14em; text-transform: uppercase;
+  margin: 2.25rem 0 .6rem; color: var(--accent); border-bottom: 1px solid var(--line);
+  padding-bottom: .35rem;
+}
+h3 { font-size: .78rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin: 1.5rem 0 .5rem; }
+.sub { color: var(--dim); font-weight: normal; text-transform: none; letter-spacing: 0; }
+.meta { color: var(--dim); margin-bottom: 1.5rem; }
+.meta b { color: var(--fg); font-weight: 600; }
+.cards { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0 0; }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: .6rem .9rem; min-width: 9rem;
+}
+.card .n { font-size: 1.3rem; font-weight: 600; }
+.card .l { color: var(--dim); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th {
+  text-align: left; color: var(--dim); font-weight: 600; font-size: .72rem;
+  letter-spacing: .08em; text-transform: uppercase; padding: .3rem .7rem .3rem 0;
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+td { padding: .28rem .7rem .28rem 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+td.wrap { white-space: normal; }
+td:not(.wrap), th { white-space: nowrap; }
+.note { color: var(--dim); }
+.none { color: var(--dim); font-style: italic; }
+.qual { color: var(--dim); margin: 0 0 .5rem; }
+.total { margin: .55rem 0 0; }
+.proj { color: var(--dim); }
+.warn { color: var(--warn); }
+.tag {
+  display: inline-block; padding: .05rem .45rem; border-radius: 3px;
+  font-size: .74rem; letter-spacing: .06em; border: 1px solid currentColor;
+}
+.pass { color: var(--ok); } .fail { color: var(--accent); } .vac { color: var(--warn); }
+.bounds { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.1rem; }
+.bounds dt { font-weight: 600; margin-top: .7rem; }
+.bounds dt:first-child { margin-top: 0; }
+.bounds dd { margin: .15rem 0 0; color: var(--dim); }
+.bounds ul { margin: .3rem 0 0; padding-left: 1.1rem; color: var(--dim); }
+footer { margin-top: 3rem; color: var(--dim); font-size: .8rem; border-top: 1px solid var(--line); padding-top: .8rem; }
+@media print { body { padding: 0; } .card, .bounds { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Ruleset delta</h1>
+<p class="meta">
+base <b>fixtures/cell-gateway-base.nft</b> &rarr; head <b>fixtures/cell-gateway-head.nft</b><br>
+fwdelta 0.1.0 &middot; generated 2025-08-15T23:20:00Z
+</p>
+<div class="cards">
+<div class="card"><div class="n fail">7.1e16</div><div class="l">flows newly blocked</div></div>
+<div class="card"><div class="n ">0</div><div class="l">flows newly allowed</div></div>
+<div class="card"><div class="n pass">1</div><div class="l">assertions passed</div></div>
+<div class="card"><div class="n fail">1</div><div class="l">failed</div></div>
+<div class="card"><div class="n ">0</div><div class="l">vacuous</div></div>
+</div>
+<h2>NEWLY BLOCKED <span class="sub">(permitted before, denied now)</span></h2>
+<p class="qual">all entries: tcp</p>
+<div class="scroll">
+<table>
+<thead><tr><th>in</th><th>source</th><th>destination</th><th>port</th><th>attribution</th></tr></thead>
+<tbody>
+<tr><td>in not eth1,lo</td><td class="wrap">10.0.0.0/8 except 10.0.0.0/15</td><td class="wrap">10.5.0.0/16 except 10.5.0.20</td><td></td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in eth1</td><td class="wrap">10.0.0.0/8 except 10.0.0.0/15,10.9.0.0/24</td><td class="wrap">10.5.0.0/16 except 10.5.0.20</td><td></td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in not eth1,lo</td><td class="wrap">10.1.0.0/16</td><td class="wrap">10.5.0.0/16 except 10.5.0.20</td><td>0-447,512-65535</td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in eth1</td><td class="wrap">10.1.0.0/16,10.9.0.0/24</td><td class="wrap">10.5.0.0/16 except 10.5.0.20</td><td>512-65535</td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in not eth1,lo</td><td class="wrap">10.0.0.0/8 except 10.0.0.0/16</td><td class="wrap">10.5.0.20</td><td>0-442,444-447,512-65535</td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in not lo</td><td class="wrap">10.1.0.0/16</td><td class="wrap">10.5.0.0/16</td><td>448-501,503-511</td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in eth1</td><td class="wrap">10.1.0.0/16</td><td class="wrap">10.5.0.0/16 except 10.5.0.20</td><td>0-447</td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in not lo</td><td class="wrap">10.1.0.0/16</td><td class="wrap">10.5.0.0/16</td><td>502</td><td class="note wrap">was allowed by rule 04, now denied by rule 05</td></tr>
+<tr><td>in eth1</td><td class="wrap">10.0.0.0/8 except 10.0.0.0/16</td><td class="wrap">10.5.0.20</td><td>256-442,444-447,512-65535</td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in not lo</td><td class="wrap">10.0.0.0/8 except 10.0.0.0/15</td><td class="wrap">10.5.0.20</td><td>448-511</td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in eth1</td><td class="wrap">10.9.0.0/24</td><td class="wrap">10.5.0.0/16 except 10.5.0.20</td><td>256-511</td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+<tr><td>in eth1</td><td class="wrap">10.9.0.0/24</td><td class="wrap">10.5.0.0/16</td><td>0-21,23-255</td><td class="note wrap">was allowed by rule 04, now denied by the default policy</td></tr>
+</tbody>
+</table>
+</div>
+<p class="total"><b>7.1e16</b> flows <span class="proj">(src, dst, dport, proto; sport/iif/oif quantified)</span></p>
+<p class="note">&hellip; 1 further entry omitted, covering 4.2e9 flows</p>
+<h2>NEWLY ALLOWED <span class="sub">(denied before, permitted now)</span></h2>
+<p class="none">none</p>
+<h2>Structural</h2>
+<div class="scroll">
+<table>
+<thead><tr><th>rule</th><th>change</th><th>detail</th></tr></thead>
+<tbody>
+<tr><td>03</td><td>now load-bearing</td><td class="note wrap">it was redundant before this change</td></tr>
+<tr><td>04</td><td>modified</td><td class="note wrap"></td></tr>
+<tr><td>05</td><td>now reachable</td><td class="note wrap">previously shadowed by rule 04</td></tr>
+</tbody>
+</table>
+</div>
+<p class="warn">Traffic lost access. This did not fail the run; --fail-on-newly-blocked makes it.</p>
+<h2>Intent</h2>
+<div class="scroll">
+<table>
+<thead><tr><th>outcome</th><th>assertion</th><th>kind</th><th>detail</th></tr></thead>
+<tbody>
+<tr><td><span class="tag fail">FAIL</span></td><td>ot-cell-isolation</td><td class="note">isolation</td><td class="wrap">tcp 10.1.0.0:0 -&gt; 10.5.0.0:502 in lo permitted</td></tr>
+<tr><td><span class="tag pass">PASS</span></td><td>mgmt-plane-reachable</td><td class="note">reachability</td><td class="wrap">all permitted mgmt -&gt; vlan_ot:22</td></tr>
+</tbody>
+</table>
+</div>
+<p class="total">2 assertions checked, 1 passed, 1 failed, 0 vacuous.</p>
+<h2>What this analysis did not cover</h2>
+<div class="bounds">
+<dl>
+<dt>Statefulness</dt>
+<dd>Stateless. New connections in the forward direction are governed by the ruleset; return traffic for permitted connections is assumed permitted. Rulesets whose security depends on connection tracking are rejected at parse time rather than approximated.</dd>
+<dt>NAT</dt>
+<dd>Not modelled. Address translation changes packet identity in transit, so a ruleset containing NAT is rejected rather than analysed with NAT ignored.</dd>
+<dt>Scope</dt>
+<dd>One host&#39;s filter table. Not end-to-end reachability, which also depends on routing and on other devices.</dd>
+<dt>Address family</dt>
+<dd>IPv4 only. The header layout is 32-bit; IPv6 is not analysed.</dd>
+<dt>Ports on portless protocols</dt>
+<dd>Every packet is given source and destination ports, including ICMP. Sound only because the frontend requires a port match to pin a protocol that has ports.</dd>
+<dt>Output interface</dt>
+<dd>Rejected, not modelled. The differential harness runs on the input hook, where the output interface is never set, so the dimension has never been checked against the kernel.</dd>
+<dt>Frontend subset</dt>
+<dd>A documented subset of nftables. Every construct outside it is a hard error, so no rule was silently skipped.</dd>
+</dl>
+<p><b>A passing run does not establish:</b></p>
+<ul>
+<li>that the assertions are the right assertions</li>
+<li>that the device implements nftables faithfully</li>
+<li>that the configuration deployed is the configuration analysed</li>
+<li>anything about NAT, routing, or other devices</li>
+<li>anything about assertions reported as VACUOUS, which held trivially</li>
+</ul>
+</div>
+<footer>
+Generated by fwdelta. This file is self-contained: no scripts, no external stylesheets, no remote assets, no network access at any point.
+</footer>
+</main>
+</body>
+</html>

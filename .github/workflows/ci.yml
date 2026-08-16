@@ -73,12 +73,42 @@ jobs:
       # models, diff, attribute and enumerate.
       - name: It must issue no network syscalls
         run: |
-          ./scripts/syscall-audit.sh \
-            target/x86_64-unknown-linux-musl/release/fwdelta \
-            diff --base fixtures/cell-gateway-base.nft \
-                 --head fixtures/cell-gateway-head.nft \
-                 --assert fixtures/cell-gateway.policy.toml \
-                 --attest /dev/null --format json
+          BIN=target/x86_64-unknown-linux-musl/release/fwdelta
+          for fmt in text json html; do
+            echo "--- $fmt ---"
+            ./scripts/syscall-audit.sh "$BIN" \
+              diff --base fixtures/cell-gateway-base.nft \
+                   --head fixtures/cell-gateway-head.nft \
+                   --assert fixtures/cell-gateway.policy.toml \
+                   --attest /dev/null --format "$fmt" --out /dev/null
+          done
+
+      # A report about a firewall is not much use if opening it needs a CDN, and
+      # one that phones out when opened is an exfiltration path for a document
+      # describing exactly where the trust boundaries are.
+      - name: The HTML report must reference nothing outside itself
+        run: |
+          BIN=target/x86_64-unknown-linux-musl/release/fwdelta
+          "$BIN" diff --base fixtures/cell-gateway-base.nft \
+                      --head fixtures/cell-gateway-head.nft \
+                      --assert fixtures/cell-gateway.policy.toml \
+                      --format html --out /tmp/report.html || [ $? -eq 1 ]
+          for pat in '<script' 'src=' 'href=' '@import' 'url(http' 'fetch(' 'http://' 'https://'; do
+            if grep -qF "$pat" /tmp/report.html; then
+              echo "report contains $pat, which reaches outside the file"; exit 1
+            fi
+          done
+          echo "self-contained"
+
+      - name: The committed example report must be current
+        run: |
+          BIN=target/x86_64-unknown-linux-musl/release/fwdelta
+          SOURCE_DATE_EPOCH=1755300000 "$BIN" diff \
+            --base fixtures/cell-gateway-base.nft \
+            --head fixtures/cell-gateway-head.nft \
+            --assert fixtures/cell-gateway.policy.toml \
+            --format html --out /tmp/example.html || [ $? -eq 1 ]
+          diff /tmp/example.html examples/cell-gateway-report.html
 
   reproducible:
     runs-on: ubuntu-24.04

@@ -6,7 +6,7 @@
 //!
 //! Run with: `cargo run --release -p fwdelta-engine --example delta_report`
 
-use fwdelta_engine::report::{ReportOptions, render_diff};
+use fwdelta_engine::report::{self, ChainInput, ReportOptions};
 use fwdelta_engine::{Field, Layout, VarOrder, analyse, diff};
 use fwdelta_ir::{Action, Chain, Hook, IfMatch, Match, Origin, Ruleset, shared_symbols};
 
@@ -107,18 +107,16 @@ fn main() {
     head.verify(&layout).expect("head model self-check");
 
     let d = diff(&base, &head);
-    println!(
-        "{}",
-        render_diff(
-            &layout,
-            &syms,
-            &base,
-            &head,
-            &d,
-            (&base_rs.label, &head_rs.label),
-            &ReportOptions::default(),
-        )
+    let model = report::build(
+        &layout,
+        &syms,
+        &[ChainInput { name: "input", base: &base, head: &head, diff: &d }],
+        (&base_rs.label, &head_rs.label),
+        Vec::new(),
+        Vec::new(),
+        &ReportOptions::default(),
     );
+    println!("{}", report::text::render(&model));
 
     println!("--- what a text diff would have shown ---");
     println!("  -    ip saddr 10.0.0.0/8  ip daddr 10.5.0.0/16 tcp accept");

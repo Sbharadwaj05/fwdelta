@@ -24,7 +24,9 @@ pub use enumerate::{
 pub use header::{Layout, VarOrder};
 pub use packet::{Packet, witness};
 pub use region::Region;
-pub use report::{ReportOptions, render_diff};
+pub use report::{
+    AssertionRow, ChainInput, DiffReport, DirectionReport, ReportOptions, build as build_report,
+};
 
 // Re-exported so downstream crates need one import for the common vocabulary.
 pub use fwdelta_ir::{Field, HEADER_BITS, IntervalSet, SymbolTable};

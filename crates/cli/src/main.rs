@@ -26,7 +26,7 @@ mod json;
 mod sha256;
 mod source;
 
-use fwdelta_engine::report::{ReportOptions, render_diff};
+use fwdelta_engine::report::{self, AssertionRow, ChainInput, ReportOptions};
 use fwdelta_engine::{
     ChainModel, Field, IntervalSet, Layout, Region, SymbolTable, VarOrder, analyse, diff,
     enumerate, exact_cardinality, flow_count,
@@ -56,10 +56,11 @@ DIFF OPTIONS
   --head <ref>       head ruleset: likewise
   --path <file>      file within the repository, when a ref is a git revision
   --chain <name>     compare only this chain (default: every chain in both)
-  --format <fmt>     text (default) or json
+  --format <fmt>     text (default), json, or html
   --fail-on-newly-blocked
                      exit 1 when traffic lost access. Off by default: most such
                      changes are deliberate and are surfaced, not blocked
+  --out <file>       write the report here instead of stdout
   --assert <file>    TOML assertion file: zones and intent claims
   --attest <file>    write an unsigned in-toto predicate here, or - for stdout
   --allow-vacuous    do not fail on assertions that hold trivially
@@ -87,13 +88,25 @@ fn main() {
     }
 }
 
+/// How the report is written out.
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+enum Format {
+    #[default]
+    Text,
+    Json,
+    /// One self-contained file: no scripts, no external assets, opens from
+    /// `file://` on a machine with no network.
+    Html,
+}
+
 #[derive(Default)]
 struct Options {
     base: Option<String>,
     head: Option<String>,
     path: Option<String>,
     chain: Option<String>,
-    json: bool,
+    format: Format,
+    out: Option<String>,
     fail_on_newly_blocked: bool,
     verify: bool,
     max_rows: usize,
@@ -132,11 +145,18 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
                 i += 2;
             }
             "--format" => {
-                match value()?.as_str() {
-                    "json" => o.json = true,
-                    "text" => o.json = false,
-                    other => return Err(format!("unknown format `{other}`; use text or json")),
-                }
+                o.format = match value()?.as_str() {
+                    "json" => Format::Json,
+                    "text" => Format::Text,
+                    "html" => Format::Html,
+                    other => {
+                        return Err(format!("unknown format `{other}`; use text, json or html"));
+                    }
+                };
+                i += 2;
+            }
+            "--out" => {
+                o.out = Some(value()?);
                 i += 2;
             }
             "--assert" => {
@@ -319,92 +339,75 @@ fn cmd_diff(o: Options) -> Result<i32, String> {
         }
     }
 
-    if o.json {
-        print!(
-            "{}",
-            diff_json(&layout, &syms, &base_rs, &head_rs, &sections, &unmatched, exit).render()
+    // One model, then a renderer. Text and HTML are two views of the same
+    // value, so they cannot disagree about what the findings are.
+    let report_opts = ReportOptions { max_rows: o.max_rows, ..Default::default() };
+    let inputs: Vec<ChainInput<'_>> = sections
+        .iter()
+        .map(|(name, bm, hm, d)| ChainInput { name, base: bm, head: hm, diff: d })
+        .collect();
+    let mut notes = unmatched.clone();
+    if lost && !o.fail_on_newly_blocked && o.format == Format::Html {
+        notes.push(
+            "Traffic lost access. This did not fail the run; --fail-on-newly-blocked makes it."
+                .to_string(),
         );
-    } else {
-        let report_opts = ReportOptions { max_rows: o.max_rows, ..Default::default() };
-        for (i, (name, bm, hm, d)) in sections.iter().enumerate() {
-            if sections.len() > 1 {
-                println!("{}CHAIN {name}\n", if i > 0 { "\n" } else { "" });
-            }
-            print!(
-                "{}",
-                render_diff(
-                    &layout,
-                    &syms,
-                    bm,
-                    hm,
-                    d,
-                    (&base_src.label, &head_src.label),
-                    &report_opts,
-                )
-            );
-        }
-        for u in &unmatched {
-            println!("\n{u}");
-        }
-        if !assertions.is_empty() {
-            print!("\n{}", render_intent(&assertions, &syms));
-        }
-        if lost && !o.fail_on_newly_blocked {
-            println!(
-                "\nTraffic lost access. This does not block the build; pass \
-                 --fail-on-newly-blocked if it should."
-            );
-        }
     }
+    let model = report::build(
+        &layout,
+        &syms,
+        &inputs,
+        (&base_src.label, &head_src.label),
+        assertions.iter().map(|a| assertion_row(a, &syms)).collect(),
+        notes,
+        &report_opts,
+    );
+
+    let rendered = match o.format {
+        Format::Json => {
+            diff_json(&layout, &syms, &base_rs, &head_rs, &sections, &unmatched, exit).render()
+        }
+        Format::Text => report::text::render(&model),
+        Format::Html => report::html::render(&model),
+    };
+
+    match &o.out {
+        Some(path) if path != "-" => {
+            std::fs::write(path, &rendered).map_err(|e| format!("{path}: {e}"))?
+        }
+        _ => print!("{rendered}"),
+    }
+
     Ok(exit)
 }
 
-/// The INTENT section, in the blueprint's shape.
-fn render_intent(reports: &[Report], syms: &SymbolTable) -> String {
-    let mut out = String::from("INTENT\n");
-    let width = reports.iter().map(|r| r.name.len()).max().unwrap_or(0);
-    for r in reports {
-        out.push_str(&format!("  {:<7} {:<width$}  ", r.outcome.label(), r.name));
-        // Wording follows the kind. "no path" is right for isolation and
-        // exactly backwards for reachability, where passing means a path exists.
-        match &r.outcome {
-            Outcome::Pass => match r.kind {
-                fwdelta_policy::Kind::Isolation => {
-                    out.push_str(&format!("no path {}\n", r.summary))
-                }
-                fwdelta_policy::Kind::Reachability => {
-                    out.push_str(&format!("all permitted {}\n", r.summary))
-                }
-            },
-            Outcome::Fail { counterexample } => {
-                let verb = match r.kind {
-                    fwdelta_policy::Kind::Isolation => "permitted",
-                    fwdelta_policy::Kind::Reachability => "denied",
-                };
-                out.push_str(&format!("{} {verb}\n", counterexample.describe(syms)));
-                out.push_str(&format!(
-                    "  {:<7} {:<width$}  required by assertion {}\n",
-                    "", "", r.name
-                ));
-            }
-            Outcome::Vacuous { reason } => {
-                out.push_str(&format!("{reason}\n"));
-            }
+/// Flatten a policy result into the report model.
+///
+/// The policy crate depends on the engine, so the engine cannot name its types;
+/// the crossing happens here. Wording follows the assertion kind: "no path" is
+/// right for isolation and exactly backwards for reachability, where passing
+/// means a path exists.
+fn assertion_row(r: &Report, syms: &SymbolTable) -> AssertionRow {
+    let detail = match &r.outcome {
+        Outcome::Pass => match r.kind {
+            fwdelta_policy::Kind::Isolation => format!("no path {}", r.summary),
+            fwdelta_policy::Kind::Reachability => format!("all permitted {}", r.summary),
+        },
+        Outcome::Fail { counterexample } => {
+            let verb = match r.kind {
+                fwdelta_policy::Kind::Isolation => "permitted",
+                fwdelta_policy::Kind::Reachability => "denied",
+            };
+            format!("{} {verb}", counterexample.describe(syms))
         }
+        Outcome::Vacuous { reason } => reason.clone(),
+    };
+    AssertionRow {
+        name: r.name.clone(),
+        kind: r.kind.as_str().to_string(),
+        outcome: r.outcome.label().to_string(),
+        detail,
     }
-    let failed = reports.iter().filter(|r| matches!(r.outcome, Outcome::Fail { .. })).count();
-    let vacuous = reports.iter().filter(|r| matches!(r.outcome, Outcome::Vacuous { .. })).count();
-    out.push_str(&format!("\n{} assertions checked", reports.len()));
-    if failed > 0 {
-        out.push_str(&format!(", {failed} failed"));
-    }
-    if vacuous > 0 {
-        // Named separately and never folded into the pass count: a vacuous
-        // assertion held trivially and established nothing.
-        out.push_str(&format!(", {vacuous} vacuous"));
-    }
-    out.push_str(".\n");
-    out
 }
 
 // ------------------------------------------------------------------ check
@@ -440,7 +443,7 @@ fn cmd_check(o: Options) -> Result<i32, String> {
         ]));
     }
 
-    if o.json {
+    if o.format == Format::Json {
         print!(
             "{}",
             Json::obj([
@@ -451,6 +454,9 @@ fn cmd_check(o: Options) -> Result<i32, String> {
             .render()
         );
         return Ok(0);
+    }
+    if o.format == Format::Html {
+        return Err("check does not produce html; use diff --format html".to_string());
     }
 
     println!("{}: {} chains, {} rules", rs.label, rs.chains.len(), rs.rule_count());
