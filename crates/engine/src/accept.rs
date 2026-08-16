@@ -38,8 +38,10 @@
 //! `A_0` also equals the forward pass's accept set, which the tests assert as a
 //! free internal consistency check on both recurrences.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use biodivine_lib_bdd::Bdd;
-use soteria_ir::{Action, Chain, Hook, SymbolTable};
+use soteria_ir::{Action, Chain, Hook, Match, SymbolTable};
 
 use crate::header::Layout;
 
@@ -65,6 +67,13 @@ impl core::fmt::Display for Decider {
 pub struct RuleModel {
     pub number: u32,
     pub action: Action,
+    /// Hash of the predicate and action, used to pair rules across revisions.
+    ///
+    /// Pairing by position would report every rule after an insertion as
+    /// changed. Identity here is what the rule *says*, so an inserted rule shows
+    /// up as one addition and its neighbours keep their identity even though
+    /// their numbers moved.
+    pub content_key: u64,
     /// Packets the predicate admits, ignoring position.
     pub matched: Bdd,
     /// Packets this rule actually decides. Empty exactly when shadowed.
@@ -222,6 +231,14 @@ impl ChainModel {
     }
 }
 
+/// Identity of a rule by what it says rather than where it sits.
+fn content_key(m: &Match, action: Action) -> u64 {
+    let mut h = DefaultHasher::new();
+    m.hash(&mut h);
+    action.hash(&mut h);
+    h.finish()
+}
+
 /// Compile a chain into its accept set and per-rule structure.
 pub fn analyse(layout: &Layout, syms: &SymbolTable, chain: &Chain) -> ChainModel {
     let mut rules: Vec<RuleModel> = Vec::with_capacity(chain.rules.len());
@@ -243,6 +260,7 @@ pub fn analyse(layout: &Layout, syms: &SymbolTable, chain: &Chain) -> ChainModel
         rules.push(RuleModel {
             number: rule.number,
             action: rule.action,
+            content_key: content_key(&rule.matches, rule.action),
             shadowed: effective.is_false(),
             matched: m,
             effective,

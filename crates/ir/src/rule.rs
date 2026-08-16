@@ -61,7 +61,7 @@ impl fmt::Display for Origin {
 /// The five packet fields are stored resolved, as value sets. The two interface
 /// dimensions keep their names and resolve against a symbol table at the engine
 /// boundary, so the IR stays faithful to what the file said.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Match {
     src_addr: IntervalSet,
     dst_addr: IntervalSet,

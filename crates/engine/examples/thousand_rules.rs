@@ -182,11 +182,11 @@ fn main() {
     for n in [100usize, 1000] {
         // No interface matches anywhere: the two interface dimensions exist in
         // the variable set but appear in no diagram.
-        let clean = generate(n, 0, 0x2026_08_15);
+        let clean = generate(n, 0, 0x2026_0815);
         let syms_clean = SymbolTable::default();
 
         // A fifth of rules scoped to an interface, which is realistic.
-        let scoped = generate(n, 20, 0x2026_08_15);
+        let scoped = generate(n, 20, 0x2026_0815);
         let syms_scoped = SymbolTable::from_names(IFACES).unwrap();
 
         println!("{n} rules");

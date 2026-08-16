@@ -106,7 +106,7 @@ impl std::error::Error for TooManyInterfaces {}
 ///
 /// Names are kept rather than resolved so the IR stays faithful to the file and
 /// findings can quote what the rule actually said.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum IfMatch {
     /// No interface constraint. Denotes the whole 8-bit domain.
     #[default]

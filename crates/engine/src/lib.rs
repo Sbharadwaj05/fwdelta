@@ -8,15 +8,19 @@
 #![forbid(unsafe_code)]
 
 pub mod accept;
+pub mod diff;
 pub mod enumerate;
 pub mod header;
 pub mod region;
 pub mod render;
+pub mod report;
 
 pub use accept::{ChainModel, Decider, RuleModel, analyse};
+pub use diff::{Attribution, ChainDiff, Structural, attribute, diff};
 pub use enumerate::{EnumOptions, Enumeration, enumerate, exact_cardinality};
 pub use header::{Layout, VarOrder};
 pub use region::Region;
+pub use report::{ReportOptions, render_diff};
 
 // Re-exported so downstream crates need one import for the common vocabulary.
 pub use soteria_ir::{Field, HEADER_BITS, IntervalSet, SymbolTable};
