@@ -7,10 +7,20 @@ control.
 > status between them, so a reviewer sees the behavioural delta instead of a
 > text delta.
 
-**Status: in development. Not released.** The blueprint's release model has no
-public 0.x — the repository goes public at `v1.0.0` with the parser, engine, diff
-and enumerator complete and tested. Partial capability shipped early reads as
-abandoned work.
+**Status: v1.0.0.** The blueprint's release model has no public 0.x: the
+repository goes public at `v1.0.0` with the parser, engine, diff and enumerator
+complete and tested, because partial capability shipped early reads as abandoned
+work.
+
+The published `x86_64-unknown-linux-musl` binary for this tag:
+
+```
+sha256  d6fdd1bd4f89834c4c53857cfd92a6d75cae8959e0087275a70ce065051b348f
+```
+
+Rebuild it yourself with `scripts/reproducible-build.sh --digest`. The toolchain
+is pinned in `rust-toolchain.toml` and the dependency graph in `Cargo.lock`, both
+committed, so the only remaining variable is the host.
 
 ## The problem
 
