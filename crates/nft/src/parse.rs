@@ -428,20 +428,33 @@ impl<'a> Parser<'a> {
                             // --inject-fault, and shipping one that has not
                             // would make that claim false. Rejected until an
                             // output-hook harness exists.
-                            return Err(self
-                                .err_at(
-                                    kline,
-                                    kcol,
-                                    Cause::Unimplemented,
-                                    "`oifname` is not supported yet",
+                            // On the input hook there is a second, independent
+                            // reason: the kernel sets no output interface there,
+                            // so the match is never applied at all. See
+                            // docs/HOOK-MATCH-MATRIX.md.
+                            let (cause, why) = if hook == Hook::Input {
+                                (
+                                    Cause::Soundness,
+                                    "the kernel does not set an output interface on the input \
+                                     hook, so nftables accepts this rule and then never applies \
+                                     it. The output-interface dimension is also unvalidated; see \
+                                     docs/HOOK-MATCH-MATRIX.md",
                                 )
-                                .with_hint(
+                            } else {
+                                (
+                                    Cause::Unimplemented,
                                     "the differential harness cannot exercise the output hook, so \
                                      the output-interface dimension has never been validated \
-                                     against the kernel. Rather than ship a dimension whose \
-                                     correctness is asserted instead of measured, it is rejected \
-                                     until an output-hook harness exists",
-                                ));
+                                     against the kernel. The kernel does apply the match here; \
+                                     what is unverified is whether the model agrees with it. \
+                                     Rather than ship a dimension whose correctness is asserted \
+                                     instead of measured, it is rejected until an output-hook \
+                                     harness exists",
+                                )
+                            };
+                            return Err(self
+                                .err_at(kline, kcol, cause, "`oifname` is not supported yet")
+                                .with_hint(why));
                         }
                         "iif" | "oif" => {
                             return Err(self

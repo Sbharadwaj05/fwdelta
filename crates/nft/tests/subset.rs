@@ -108,7 +108,9 @@ fn unsupported_constructs_fail_loudly_with_a_position() {
         ("ip frag-off 0 accept", Cause::Unimplemented, "supported subset"),
         // The output-interface dimension has never been differentially
         // validated, so it is rejected rather than shipped on trust.
-        ("oifname \"eth0\" accept", Cause::Unimplemented, "not supported yet"),
+        // On the input hook the kernel never sets an output interface, so this
+        // is unsound as well as unvalidated. See docs/HOOK-MATCH-MATRIX.md.
+        ("oifname \"eth0\" accept", Cause::Soundness, "not supported yet"),
         ("meta oifname \"eth0\" accept", Cause::Unimplemented, "not supported yet"),
     ];
 
@@ -136,12 +138,51 @@ fn unsupported_constructs_fail_loudly_with_a_position() {
 /// reason reads as an oversight rather than a deliberate boundary.
 #[test]
 fn the_oifname_rejection_explains_that_it_is_unvalidated() {
-    let src = "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    oifname \"eth0\" accept\n  }\n}";
+    // On output the kernel does apply the match; what is unverified is whether
+    // the model agrees with it. The message has to say which.
+    let src = "table ip filter {\n  chain out {\n    type filter hook output priority filter; policy accept;\n    oifname \"eth0\" accept\n  }\n}";
     let err = parse("t.nft", src).map(|_| ()).unwrap_err();
+    assert_eq!(err.cause, Cause::Unimplemented, "{err}");
     let text = err.to_string();
     assert!(text.contains("differential harness"), "{text}");
-    assert!(text.contains("output hook"), "{text}");
     assert!(text.contains("never been validated"), "{text}");
+    assert!(text.contains("kernel does apply the match here"), "{text}");
+}
+
+/// The two cells the sweep found: accepted by nftables, never applied by the
+/// kernel. Both must be Soundness rejections, and the messages must say why.
+/// See docs/HOOK-MATCH-MATRIX.md.
+#[test]
+fn matches_the_kernel_silently_ignores_are_rejected_as_unsound() {
+    let cases: &[(&str, &str, &str)] = &[
+        // iifname on output: no input interface is set there.
+        ("output", "accept", "iifname \"eth0\" accept"),
+        // oifname on input: no output interface is set there.
+        ("input", "drop", "oifname \"eth0\" accept"),
+    ];
+    for (hook, policy, stmt) in cases {
+        let src = format!(
+            "table ip filter {{\n  chain c {{\n    type filter hook {hook} priority filter; policy {policy};\n    {stmt}\n  }}\n}}"
+        );
+        let err = parse("t.nft", &src).map(|_| ()).expect_err(&format!("{hook}: {stmt}"));
+        assert_eq!(err.cause, Cause::Soundness, "{hook}/{stmt}: {err}");
+        assert!(
+            err.to_string().contains("never applies it"),
+            "{hook}/{stmt} should say the kernel ignores it: {err}"
+        );
+    }
+}
+
+/// The cells the sweep found live must stay accepted, or the test above could
+/// be satisfied by rejecting interfaces entirely.
+#[test]
+fn matches_the_kernel_does_apply_are_accepted() {
+    for hook in ["input", "forward"] {
+        let src = format!(
+            "table ip filter {{\n  chain c {{\n    type filter hook {hook} priority filter; policy drop;\n    iifname \"eth0\" accept\n  }}\n}}"
+        );
+        assert!(parse("t.nft", &src).is_ok(), "iifname must work on {hook}");
+    }
 }
 
 /// nftables accepts `iifname` on an output chain and then never applies it.

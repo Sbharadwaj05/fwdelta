@@ -144,3 +144,17 @@ jobs:
 
       - name: The model must agree with the kernel
         run: ./target/release/soteria-kerneldiff --rules 50 --packets 120 --rounds 4
+
+      # The differential harness cannot find matches the kernel silently
+      # ignores, because it generates rulesets from the model under test. This
+      # sweep can, and the committed table must not drift.
+      - name: Hook x match matrix must match the committed table
+        run: |
+          ./scripts/hook-match-sweep.sh --markdown > /tmp/matrix.md
+          if ! grep -qF "$(sed -n '/^| match |/,/^| .oifname/p' /tmp/matrix.md | tail -1)" \
+                 docs/HOOK-MATCH-MATRIX.md; then
+            echo "the sweep disagrees with docs/HOOK-MATCH-MATRIX.md"
+            diff <(sed -n '/^| match |/,$p' /tmp/matrix.md) \
+                 <(sed -n '/^| match |/,/^$/p' docs/HOOK-MATCH-MATRIX.md) || true
+            exit 1
+          fi

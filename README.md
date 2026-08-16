@@ -115,6 +115,7 @@ Every claim above has a mechanism behind it, and each runs in CI.
 | The build is reproducible | `scripts/reproducible-build.sh` builds twice and requires identical digests; the toolchain is pinned in `rust-toolchain.toml` and the graph in `Cargo.lock`, both committed. Two builds on one host catch embedded paths and timestamps; cross-machine reproducibility is what publishing the digest is for. |
 | No unsafe in first-party code | `#![forbid(unsafe_code)]` at every crate root. |
 | The parser has a boundary | [docs/NFTABLES-SUBSET.md](docs/NFTABLES-SUBSET.md), with a test asserting the cause and position of every rejection. |
+| No accepted match is silently dead | [docs/HOOK-MATCH-MATRIX.md](docs/HOOK-MATCH-MATRIX.md) sweeps every hook against every match type with real nftables and counters. Two combinations load and are then ignored by the kernel; both are rejected by the frontend. This class is invisible to the differential harness, which generates rulesets from the model it is testing. |
 | Every dimension a ruleset can constrain has been falsified | Each is broken deliberately by an `--inject-fault` mode and the harness is required to detect it. `oifname` is rejected by the frontend rather than shipped, precisely because the harness cannot exercise the output hook and so cannot falsify it. |
 | The engine agrees with itself | The accept set is derived two independent ways and `ChainModel::verify` requires them to match, alongside the partition invariant. |
 
@@ -130,6 +131,7 @@ fixtures/          rulesets used by the tests, validated against real nft in CI
 docs/SEMANTICS.md         the specification the implementation is reviewed against
 docs/DECISIONS.md         architectural decisions, with the reasoning and the cost
 docs/NFTABLES-SUBSET.md   the frontend's boundary
+docs/HOOK-MATCH-MATRIX.md hook x match, swept against the kernel
 ```
 
 ## Building

@@ -103,7 +103,17 @@ These are rejections that exist because of the *model*, not the grammar.
    if translation happens, the filter analysis describes packets that do not
    exist as analysed.
 
-4. **A dimension that has never been checked against the kernel is not
+4. **A match nftables accepts but the kernel never applies is rejected.** The
+   full cross product of hooks against match types was swept with real
+   nftables and per-rule counters; the result is
+   [docs/HOOK-MATCH-MATRIX.md](HOOK-MATCH-MATRIX.md). Exactly two cells load
+   and are then ignored by the kernel — `iifname` on output and `oifname` on
+   input — and both are rejected. That table is the answer to "how do you know
+   there are not more", and it exists because the differential harness
+   structurally cannot find this class: it generates rulesets from the model
+   under test, so it only produces combinations already handled.
+
+5. **A dimension that has never been checked against the kernel is not
    shipped.** `oifname` is rejected for this reason alone — the grammar is
    trivial and the model already has the dimension. The project's claim is that
    correctness is measured rather than asserted, and the `IgnoreInterface`
