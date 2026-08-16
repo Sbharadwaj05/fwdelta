@@ -170,6 +170,8 @@ docs/SEMANTICS.md         the specification the implementation is reviewed again
 docs/DECISIONS.md         architectural decisions, with the reasoning and the cost
 docs/NFTABLES-SUBSET.md   the frontend's boundary
 docs/HOOK-MATCH-MATRIX.md hook x match, swept against the kernel
+docs/nftables-hook-match-applicability.md
+                          standalone writeup of the sweep, useful without this tool
 ```
 
 ## Building
