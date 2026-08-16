@@ -11,7 +11,7 @@ use soteria_ir::SymbolTable;
 
 use crate::accept::{ChainModel, Decider};
 use crate::diff::{ChainDiff, Structural, attribute};
-use crate::enumerate::{EnumOptions, enumerate};
+use crate::enumerate::{EnumOptions, enumerate, flow_count};
 use crate::header::Layout;
 use crate::render::{self, Row, Style};
 
@@ -100,7 +100,6 @@ fn direction_section(
     // lets a narrow finding from an early rule lead while the widest change in
     // the diff sits halfway down the page.
     found.sort_by_key(|(count, _)| std::cmp::Reverse(*count));
-    let total: u128 = found.iter().map(|(n, _)| *n).sum::<u128>() + omitted_packets;
     if found.len() > opts.max_rows {
         let dropped = found.split_off(opts.max_rows);
         omitted_regions += dropped.len();
@@ -119,7 +118,17 @@ fn direction_section(
     }
 
     out.push_str(&render::table(&rows, "  "));
-    out.push_str(&format!("  {} packets total\n", render::count(total)));
+
+    // The headline magnitude is a flow count, not a packet count. Both are
+    // exact; the packet count is simply uncalibratable, because roughly sixteen
+    // million of any figure it produces comes from source port and the two
+    // interface dimensions, which almost nothing constrains. The projection is
+    // existential quantification and its membership is fixed, so two runs are
+    // always comparable. The exact 120-bit figure goes to the JSON path.
+    out.push_str(&format!(
+        "  {} flows  (src, dst, dport, proto; sport/iif/oif quantified)\n",
+        render::count(flow_count(layout, delta))
+    ));
     if omitted_regions > 0 {
         out.push_str(&format!(
             "  ... {omitted_regions} further {} omitted, covering {} packets\n",
@@ -359,6 +368,39 @@ mod tests {
             .expect("at least one finding");
         // The modbus rule decides a single port; it must not be the headline.
         assert!(!first.contains(":502"), "narrowest finding led:\n{text}");
+    }
+
+    /// The headline has to declare what it projected away, or it is a number
+    /// with no stated meaning.
+    #[test]
+    fn the_flow_headline_names_its_projection() {
+        let (l, s, base, head) = scenario();
+        let (bm, hm) = (analyse(&l, &s, &base), analyse(&l, &s, &head));
+        let d = diff(&bm, &hm);
+        let text = render_diff(&l, &s, &bm, &hm, &d, ("a", "b"), &ReportOptions::default());
+        assert!(
+            text.contains("flows  (src, dst, dport, proto; sport/iif/oif quantified)"),
+            "report was:\n{text}"
+        );
+    }
+
+    /// The flow figure must be the projection of the delta, not of the rows
+    /// that survived the display cap.
+    #[test]
+    fn the_flow_count_measures_the_whole_delta() {
+        let (l, s, base, head) = scenario();
+        let (bm, hm) = (analyse(&l, &s, &base), analyse(&l, &s, &head));
+        let d = diff(&bm, &hm);
+        let tight = ReportOptions { max_rows: 1, ..Default::default() };
+        let full = ReportOptions::default();
+        let flows = |o| {
+            let t = render_diff(&l, &s, &bm, &hm, &d, ("a", "b"), &o);
+            t.lines()
+                .find(|line| line.contains("flows  ("))
+                .map(str::to_string)
+                .expect("a flow line")
+        };
+        assert_eq!(flows(tight), flows(full));
     }
 
     #[test]

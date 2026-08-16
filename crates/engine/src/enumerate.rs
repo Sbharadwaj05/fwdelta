@@ -341,3 +341,98 @@ mod tests {
         assert!(!e.incomplete);
     }
 }
+
+// ---------------------------------------------------------------- projection
+
+/// The dimensions a flow count keeps.
+///
+/// **Fixed, never adaptive.** Choosing the projection per run — say, dropping
+/// whichever dimensions happen to be unconstrained in this delta — would make
+/// two runs produce incomparable numbers, which destroys the one thing a count
+/// is for. A number a reviewer cannot calibrate against is worse than none.
+pub const FLOW_DIMS: [Field; 4] =
+    [Field::SrcAddr, Field::DstAddr, Field::DstPort, Field::Proto];
+
+/// The dimensions a flow count quantifies away.
+pub const QUANTIFIED_DIMS: [Field; 3] = [Field::SrcPort, Field::IfIn, Field::IfOut];
+
+/// Count distinct flows: `|∃ sport, iif, oif . set|`.
+///
+/// This is existential quantification, so it is exact rather than an estimate.
+/// It answers a narrower question than the packet count — see `SEMANTICS.md`
+/// section 4.4 — but it is the question a network engineer asks, and unlike the
+/// raw 2^120 packet count it is a number a human can calibrate against.
+pub fn flow_count(layout: &Layout, set: &Bdd) -> u128 {
+    let mut projected = set.clone();
+    let mut quantified_bits = 0u32;
+    for f in QUANTIFIED_DIMS {
+        quantified_bits += f.bits();
+        for b in 0..f.bits() {
+            let v = layout.var(f, b);
+            // Existential quantification over one variable is the disjunction of
+            // its two cofactors.
+            projected = projected
+                .restrict(&[(v, true)])
+                .or(&projected.restrict(&[(v, false)]));
+        }
+    }
+    // The result no longer depends on the quantified variables, so its
+    // cardinality over the full space is exactly flows * 2^quantified_bits.
+    exact_cardinality(&projected) >> quantified_bits
+}
+
+#[cfg(test)]
+mod projection_tests {
+    use super::*;
+
+    #[test]
+    fn the_projection_set_covers_every_dimension_exactly_once() {
+        let mut seen: Vec<Field> = FLOW_DIMS.to_vec();
+        seen.extend(QUANTIFIED_DIMS);
+        seen.sort();
+        let mut all = Field::ALL.to_vec();
+        all.sort();
+        assert_eq!(seen, all, "flow dims and quantified dims must partition the header");
+    }
+
+    #[test]
+    fn one_flow_is_one_flow_however_many_packets_it_holds() {
+        let l = Layout::default();
+        // One src, one dst, one port, one protocol; source port left free.
+        let one = l
+            .eq(Field::SrcAddr, 0x0A01_0001)
+            .and(&l.eq(Field::DstAddr, 0x0A05_000E))
+            .and(&l.eq(Field::DstPort, 502))
+            .and(&l.eq(Field::Proto, 6));
+        assert_eq!(flow_count(&l, &one), 1);
+        // 65536 source ports x 256 x 256 interface symbols.
+        assert_eq!(exact_cardinality(&one), 1u128 << 32);
+    }
+
+    #[test]
+    fn quantified_dimensions_do_not_multiply_the_count() {
+        let l = Layout::default();
+        let base = l.eq(Field::DstAddr, 0x0A05_0014).and(&l.eq(Field::Proto, 6));
+        // Pinning a source port must not change how many flows there are.
+        let pinned = base.and(&l.eq(Field::SrcPort, 44000));
+        assert_eq!(flow_count(&l, &base), flow_count(&l, &pinned));
+    }
+
+    #[test]
+    fn flows_scale_with_the_kept_dimensions() {
+        let l = Layout::default();
+        let hosts = l.prefix(Field::DstAddr, 0x0A05_0000, 24);
+        let two_ports = l.eq(Field::DstPort, 80).or(&l.eq(Field::DstPort, 443));
+        let set = hosts.and(&two_ports).and(&l.eq(Field::Proto, 6)).and(
+            &l.prefix(Field::SrcAddr, 0x0A01_0000, 24),
+        );
+        // 256 sources x 256 destinations x 2 ports x 1 protocol.
+        assert_eq!(flow_count(&l, &set), 256 * 256 * 2);
+    }
+
+    #[test]
+    fn the_empty_set_has_no_flows() {
+        let l = Layout::default();
+        assert_eq!(flow_count(&l, &l.ff()), 0);
+    }
+}

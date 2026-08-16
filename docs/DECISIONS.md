@@ -278,3 +278,25 @@ Two real caveats keep it a candidate rather than a fix:
 
 Neither is a reason to call the problem unimprovable, which is what the earlier
 wording implied.
+
+
+---
+
+## D-06 Maximal-rectangle covering in the enumerator — DEFERRED post-1.0
+
+Logged so it is not lost, and explicitly **not** to be touched before the
+frontend exists.
+
+The enumerator decomposes a delta into rectangles derived from root-to-one paths
+through the diagram. Where a delta is genuinely non-rectangular — an accept
+range with several narrower rules punching holes in it — that decomposition can
+run to ten or more rows when a greedy maximal-rectangle covering would produce
+perhaps three fatter ones.
+
+The current output is honest: exact, disjoint, ordered by breadth, and the
+fragmentation reflects the shape of the set rather than a defect. The gate
+criterion in section 09 is met. This is a readability improvement, not a bug
+fix, and it is a real algorithmic change to the highest-risk component in the
+project — precisely the thing not to be reworking while the parser is unwritten.
+
+Revisit after 1.0, against real rulesets rather than generated ones.

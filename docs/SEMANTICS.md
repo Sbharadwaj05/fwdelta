@@ -147,7 +147,38 @@ nftables enforces this naturally, since `tcp dport 22` implies `meta l4proto tcp
 A frontend that let a bare port match through would produce a model that
 disagrees with the kernel on ICMP traffic. M1 must reject such rules loudly.
 
-### 4.3 Not modelled
+### 4.3 Flow counts are a projection
+
+Reports headline a **flow count**, not a packet count:
+
+```
+7.1e16 flows  (src, dst, dport, proto; sport/iif/oif quantified)
+```
+
+This is existential quantification — `|∃ sport, iif, oif . delta|` — so it is
+exact, not an estimate or a sample. Both figures are exact; the packet count is
+simply impossible to calibrate against, because a factor of 2^32 in any figure
+it produces comes from source port and the two interface dimensions, which
+almost no rule constrains.
+
+Two properties are deliberate:
+
+- **The projection set is fixed** at `{src, dst, dport, proto}`. It never adapts
+  to which dimensions happen to be free in a given run. An adaptive projection
+  would make two runs produce incomparable numbers, which destroys the one thing
+  a count is for.
+- **The exact 120-bit packet count stays in the machine-readable output.** The
+  headline is for humans; nothing is lost on the JSON path.
+
+**What the projection gives up.** Where a quantified dimension *is* constrained
+— a rule matching `tcp sport 1024-65535`, or one scoped to `iifname "eth1"` —
+the projection collapses that variation. Two findings that differ only in source
+port count as one flow. The number remains an exact answer, but to a narrower
+question than the packet count answers, and it will understate a delta whose
+substance lies entirely in a quantified dimension. The packet count in the JSON
+is the one to read in that case.
+
+### 4.4 Not modelled
 
 - **NAT.** Address translation changes packet identity in transit. Filtering
   only; a ruleset containing NAT rules is rejected with a clear message.
