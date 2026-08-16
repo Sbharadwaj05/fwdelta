@@ -62,7 +62,10 @@ impl Coverage {
             ("input interface", judge(&self.iif)),
             (
                 "output interface",
-                Verdict::NotApplicable("never set on the input hook; needs an output-hook harness"),
+                Verdict::NotApplicable(
+                    "not in the supported subset; the frontend rejects oifname because this \
+                     harness cannot validate it",
+                ),
             ),
         ]
     }

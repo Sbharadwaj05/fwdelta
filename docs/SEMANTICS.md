@@ -49,6 +49,13 @@ ones — all of them. Two consequences, both load-bearing:
 
 See `crates/ir/src/interface.rs` and decision D-02.
 
+**The output interface dimension is present but unusable at 1.0.** The frontend
+rejects `oifname`, so no ruleset can constrain it and it is always the full
+domain. The reason is validation, not modelling: the differential harness runs
+on the input hook, where the kernel never sets an output interface, so the
+dimension has never been checked against the kernel. It stays in the layout so
+that adding an output-hook harness later needs no change to the header space.
+
 ## 3. Rules and evaluation
 
 A rule is a conjunctive predicate over the seven dimensions plus an action.

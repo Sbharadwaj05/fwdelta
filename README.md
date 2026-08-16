@@ -112,8 +112,10 @@ Every claim above has a mechanism behind it, and each runs in CI.
 | Probes exercise every dimension | Coverage is computed from the probes actually sent and printed on every run. A dimension held constant fails the run. |
 | No network access | Two complementary mechanisms, neither of which is a proof alone. `deny.toml` is static: it bans network-capable crates by name across the whole graph, but cannot detect capability by analysis. `scripts/syscall-audit.sh` is dynamic: it straces the binary and fails on a single socket syscall, which establishes that none occurred **on the paths the audit run exercised** — not that none exists in the binary. A socket call in an unreached branch would not appear. See below. |
 | One file, no dependencies | Static musl build, verified statically linked in CI. |
+| The build is reproducible | `scripts/reproducible-build.sh` builds twice and requires identical digests; the toolchain is pinned in `rust-toolchain.toml` and the graph in `Cargo.lock`, both committed. Two builds on one host catch embedded paths and timestamps; cross-machine reproducibility is what publishing the digest is for. |
 | No unsafe in first-party code | `#![forbid(unsafe_code)]` at every crate root. |
 | The parser has a boundary | [docs/NFTABLES-SUBSET.md](docs/NFTABLES-SUBSET.md), with a test asserting the cause and position of every rejection. |
+| Every dimension a ruleset can constrain has been falsified | Each is broken deliberately by an `--inject-fault` mode and the harness is required to detect it. `oifname` is rejected by the frontend rather than shipped, precisely because the harness cannot exercise the output hook and so cannot falsify it. |
 | The engine agrees with itself | The accept set is derived two independent ways and `ChainModel::verify` requires them to match, alongside the partition invariant. |
 
 ## Repository
@@ -135,6 +137,13 @@ docs/NFTABLES-SUBSET.md   the frontend's boundary
 ```sh
 cargo test --workspace
 cargo build --release --target x86_64-unknown-linux-musl
+
+# check the build reproduces, and print the digest a third party can compare
+scripts/reproducible-build.sh
+
+# or run it from a container with nothing else in it
+podman build -t soteria -f Containerfile .
+podman run --rm -v "$PWD:/work:ro" soteria diff --base /work/base.nft --head /work/head.nft
 ```
 
 Comparing two revisions:

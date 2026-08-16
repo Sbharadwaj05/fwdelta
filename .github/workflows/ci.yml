@@ -80,6 +80,37 @@ jobs:
                  --assert fixtures/cell-gateway.policy.toml \
                  --attest /dev/null --format json
 
+  reproducible:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      # Section 03 claims a third party can rebuild the published binary and
+      # compare digests. Two builds on one host catch embedded paths,
+      # timestamps and incremental state; they do not prove cross-machine
+      # reproducibility, which is what publishing the digest is for.
+      - name: Two builds of identical source must agree
+        run: ./scripts/reproducible-build.sh
+
+  container:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # Section 08 lists a container image as a distribution channel, so it has
+      # to build. The final stage is scratch, so a successful run of the binary
+      # inside it also demonstrates the static link.
+      - name: Build the image
+        run: docker build -f Containerfile -t soteria:ci .
+      - name: It must run with nothing else in the image
+        run: |
+          docker run --rm -v "$PWD/fixtures:/f:ro" soteria:ci \
+            diff --base /f/cell-gateway-base.nft --head /f/cell-gateway-head.nft \
+            || [ $? -eq 1 ]
+
   kernel-differential:
     runs-on: ubuntu-24.04
     steps:

@@ -27,7 +27,7 @@ table ip filter {
 
     tcp dport 502 ip saddr 10.1.0.0/16 reject with icmp type port-unreachable
     ip saddr 10.0.0.1-10.0.0.50 ip daddr != 10.5.0.20 drop
-    oifname != "wg0" ip protocol { tcp, udp } drop
+    iifname != "wg0" ip protocol { tcp, udp } drop
   }
 }
 "#;
@@ -68,7 +68,7 @@ fn a_realistic_ruleset_parses_to_the_expected_shape() {
     assert_eq!(dst.count(), (1u128 << 32) - 1);
 
     // A negated interface, and a protocol set.
-    assert_eq!(c.rules[7].matches.oif, IfMatch::not_one("wg0"));
+    assert_eq!(c.rules[7].matches.iif, IfMatch::not_one("wg0"));
     assert_eq!(c.rules[7].matches.packet_dim(Field::Proto).ranges(), &[(6, 6), (17, 17)]);
 }
 
@@ -106,6 +106,10 @@ fn unsupported_constructs_fail_loudly_with_a_position() {
         ("ip saddr 10.0.0.0/8", Cause::OutOfScope, "no verdict"),
         ("ip protocol icmp ip protocol tcp accept", Cause::Soundness, "never match"),
         ("ip frag-off 0 accept", Cause::Unimplemented, "supported subset"),
+        // The output-interface dimension has never been differentially
+        // validated, so it is rejected rather than shipped on trust.
+        ("oifname \"eth0\" accept", Cause::Unimplemented, "not supported yet"),
+        ("meta oifname \"eth0\" accept", Cause::Unimplemented, "not supported yet"),
     ];
 
     for (stmt, want_cause, want_text) in cases {
@@ -126,6 +130,33 @@ fn unsupported_constructs_fail_loudly_with_a_position() {
         // Every rejection quotes the offending line.
         assert!(err.snippet.contains(stmt.split_whitespace().next().unwrap()), "{err}");
     }
+}
+
+/// Rejecting `oifname` has to say *why*, because "not supported yet" without a
+/// reason reads as an oversight rather than a deliberate boundary.
+#[test]
+fn the_oifname_rejection_explains_that_it_is_unvalidated() {
+    let src = "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    oifname \"eth0\" accept\n  }\n}";
+    let err = parse("t.nft", src).map(|_| ()).unwrap_err();
+    let text = err.to_string();
+    assert!(text.contains("differential harness"), "{text}");
+    assert!(text.contains("output hook"), "{text}");
+    assert!(text.contains("never been validated"), "{text}");
+}
+
+/// nftables accepts `iifname` on an output chain and then never applies it.
+/// Verified against real nft: the rule counts zero packets. Modelling it as a
+/// live dimension would disagree with the kernel on every such rule.
+#[test]
+fn iifname_on_an_output_chain_is_rejected_as_unsound() {
+    let src = "table ip filter {\n  chain out {\n    type filter hook output priority filter; policy accept;\n    iifname \"eth0\" accept\n  }\n}";
+    let err = parse("t.nft", src).map(|_| ()).unwrap_err();
+    assert_eq!(err.cause, Cause::Soundness, "{err}");
+    assert!(err.to_string().contains("can never match"), "{err}");
+
+    // The same rule on an input chain is fine.
+    let ok = "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    iifname \"eth0\" accept\n  }\n}";
+    assert!(parse("t.nft", ok).is_ok());
 }
 
 #[test]

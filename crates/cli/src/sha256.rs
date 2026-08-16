@@ -139,24 +139,36 @@ mod tests {
         );
     }
 
-    /// Every padding boundary: one byte short of a block, exactly a block, and
-    /// the case that forces a second padding block.
+    /// Every padding boundary, against digests taken from `sha256sum`.
+    ///
+    /// This is the test that matters for a hand-written implementation. "abc"
+    /// passes on almost any attempt; the failures live where the message length
+    /// interacts with padding — at 55 bytes the length field just fits, at 56 it
+    /// forces a second block, and at 64 the message is exactly one block with a
+    /// whole block of padding after it. An implementation that gets `abc` right
+    /// and 56 wrong is the normal way this goes wrong.
     #[test]
-    fn padding_boundaries_are_handled() {
-        for n in [54usize, 55, 56, 57, 63, 64, 65, 119, 120] {
-            let input = "x".repeat(n);
-            // Cross-check the length-dependent path against a known property:
-            // the digest is 32 bytes and differs from its neighbours.
-            let d = digest(input.as_bytes());
-            assert_eq!(d.len(), 32);
-            let other = digest("x".repeat(n + 1).as_bytes());
-            assert_ne!(d, other, "length {n} collided with {}", n + 1);
+    fn every_padding_boundary_matches() {
+        let cases: &[(usize, &str)] = &[
+            (0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+            (1, "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"),
+            // 55: the last length that fits in one block with its padding.
+            (55, "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318"),
+            // 56: the first that does not, so a second block appears.
+            (56, "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a"),
+            (57, "f13b2d724659eb3bf47f2dd6af1accc87b81f09f59f2b75e5c0bed6589dfe8c6"),
+            (63, "7d3e74a05d7db15bce4ad9ec0658ea98e3f06eeecf16b4c6fff2da457ddc2f34"),
+            // 64: exactly one block of message, one entirely of padding.
+            (64, "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb"),
+            (65, "635361c48bb9eab14198e76ea8ab7f1a41685d6ad62aa9146d301d4f17eb0ae0"),
+            (119, "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb"),
+            (120, "2f3d335432c70b580af0e8e1b3674a7c020d683aa5f73aaaedfdc55af904c21c"),
+            (127, "c57e9278af78fa3cab38667bef4ce29d783787a2f731d4e12200270f0c32320a"),
+            (128, "6836cf13bac400e9105071cd6af47084dfacad4e5e302c94bfed24e013afb73e"),
+        ];
+        for (n, want) in cases {
+            assert_eq!(hex_digest(&"a".repeat(*n)), *want, "{n} bytes");
         }
-        // 56 bytes is the exact point where padding needs a second block.
-        assert_eq!(
-            hex_digest(&"a".repeat(56)),
-            "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a"
-        );
     }
 
     #[test]

@@ -348,7 +348,7 @@ impl<'a> Parser<'a> {
             if *self.peek() == Tok::Eof {
                 return Err(self.syntax("unexpected end of file inside `chain`"));
             }
-            let (m, action, origin) = self.rule()?;
+            let (m, action, origin) = self.rule(hook)?;
             chain.push(m, action, origin);
         }
         Ok(chain)
@@ -356,7 +356,7 @@ impl<'a> Parser<'a> {
 
     // ----------------------------------------------------------------- rules
 
-    fn rule(&mut self) -> Result<(Match, Action, Origin), ParseError> {
+    fn rule(&mut self, hook: Hook) -> Result<(Match, Action, Origin), ParseError> {
         let (line, column) = self.at();
         let mut m = Match::any();
         let mut action: Option<Action> = None;
@@ -394,12 +394,54 @@ impl<'a> Parser<'a> {
                                 ));
                         }
                         "iifname" => {
+                            // The kernel sets the input interface on the input
+                            // and forward hooks only. On output it is never
+                            // set, so this match can never fire -- verified
+                            // against nft, which accepts the syntax and then
+                            // counts zero packets. Modelling it as a live
+                            // dimension there would make the model disagree
+                            // with the kernel on every such rule.
+                            if hook == Hook::Output {
+                                return Err(self
+                                    .err_at(
+                                        kline,
+                                        kcol,
+                                        Cause::Soundness,
+                                        "`iifname` on an output chain can never match",
+                                    )
+                                    .with_hint(
+                                        "the kernel does not set an input interface on the output \
+                                         hook, so nftables accepts this rule and then never \
+                                         applies it; a model that treated it as live would \
+                                         disagree with the kernel",
+                                    ));
+                            }
                             let s = self.if_spec()?;
                             m = m.with_iif(s);
                         }
                         "oifname" => {
-                            let s = self.if_spec()?;
-                            m = m.with_oif(s);
+                            // The output interface dimension exists in the
+                            // header space but has never been checked against
+                            // the kernel: the differential harness works on the
+                            // input hook, where oif is never set. Every other
+                            // dimension in the model has been falsified under
+                            // --inject-fault, and shipping one that has not
+                            // would make that claim false. Rejected until an
+                            // output-hook harness exists.
+                            return Err(self
+                                .err_at(
+                                    kline,
+                                    kcol,
+                                    Cause::Unimplemented,
+                                    "`oifname` is not supported yet",
+                                )
+                                .with_hint(
+                                    "the differential harness cannot exercise the output hook, so \
+                                     the output-interface dimension has never been validated \
+                                     against the kernel. Rather than ship a dimension whose \
+                                     correctness is asserted instead of measured, it is rejected \
+                                     until an output-hook harness exists",
+                                ));
                         }
                         "iif" | "oif" => {
                             return Err(self
@@ -672,10 +714,12 @@ impl<'a> Parser<'a> {
                 let s = self.if_spec()?;
                 Ok(m.with_iif(s))
             }
-            "oifname" => {
-                let s = self.if_spec()?;
-                Ok(m.with_oif(s))
-            }
+            "oifname" => Err(self
+                .err_at(line, col, Cause::Unimplemented, "`meta oifname` is not supported yet")
+                .with_hint(
+                    "the output-interface dimension has never been validated against the kernel; \
+                     see docs/NFTABLES-SUBSET.md",
+                )),
             other => Err(self
                 .err_at(
                     line,

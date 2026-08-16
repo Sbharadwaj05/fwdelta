@@ -45,7 +45,9 @@ a shared misunderstanding of the syntax cannot cancel itself out.
 | `tcp sport` / `tcp dport` | supported | implies protocol tcp |
 | `udp sport` / `udp dport` | supported | implies protocol udp |
 | `sctp` / `dccp` ports | rejected | trivial to add; not yet exercised against the kernel |
-| `iifname` / `oifname` | supported | quoted or bare names |
+| `iifname` (input and forward hooks) | supported | quoted or bare names |
+| `iifname` on an **output** chain | rejected | the kernel never sets an input interface on the output hook, so nftables accepts the rule and then never applies it. Verified against real `nft`: the rule counts zero packets. Modelling it as live would disagree with the kernel. |
+| `oifname` | rejected | **the dimension exists in the model but has never been differentially validated.** The harness works on the input hook, where the output interface is never set. Every other dimension a ruleset can constrain has been falsified under `--inject-fault`; shipping this one would make that claim false. Rejected until an output-hook harness exists. |
 | `iif` / `oif` | rejected | matches the numeric ifindex, which is not stable across reloads and not comparable between two revisions of a file |
 | interface wildcards (`"eth*"`) | rejected | a wildcard over a symbol space the tool only partially observes is a soundness question, not a parsing one (D-02) |
 | `ct state` and all conntrack matches | rejected | outside the stateless model (SEMANTICS §4.1) |
@@ -100,3 +102,11 @@ These are rejections that exist because of the *model*, not the grammar.
 3. **NAT anywhere in the file rejects the whole file.** Not just the NAT rule:
    if translation happens, the filter analysis describes packets that do not
    exist as analysed.
+
+4. **A dimension that has never been checked against the kernel is not
+   shipped.** `oifname` is rejected for this reason alone — the grammar is
+   trivial and the model already has the dimension. The project's claim is that
+   correctness is measured rather than asserted, and the `IgnoreInterface`
+   finding demonstrated the failure mode: an untested dimension reports
+   agreement and looks identical to a working one. This is that rule applied to
+   the tool itself.
