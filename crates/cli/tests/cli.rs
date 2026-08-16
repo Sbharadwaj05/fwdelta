@@ -205,3 +205,183 @@ fn selecting_a_missing_chain_is_an_error_not_an_empty_report() {
     let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--chain", "nosuch"]);
     assert_eq!(out.status.code(), Some(2));
 }
+
+// ------------------------------------------------------------------- M5
+
+fn policy_file() -> String {
+    fixture("cell-gateway.policy.toml").to_string_lossy().into_owned()
+}
+
+fn write_temp(name: &str, body: &str) -> String {
+    let dir = std::env::temp_dir().join("soteria-cli-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join(name);
+    std::fs::write(&p, body).unwrap();
+    p.to_string_lossy().into_owned()
+}
+
+#[test]
+fn assertions_are_reported_with_kind_appropriate_wording() {
+    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--assert", &policy_file()]);
+    let text = stdout(&out);
+    assert!(text.contains("INTENT"), "{text}");
+    // Isolation that fails names the packet that got through.
+    assert!(text.contains("FAIL    ot-cell-isolation"), "{text}");
+    assert!(text.contains(":502"), "{text}");
+    // Reachability that passes must not say "no path", which is the opposite
+    // of what passing means for that kind.
+    assert!(text.contains("PASS    mgmt-plane-reachable"), "{text}");
+    assert!(!text.contains("no path mgmt"), "wrong wording for reachability:\n{text}");
+    assert!(text.contains("all permitted mgmt"), "{text}");
+}
+
+#[test]
+fn a_failed_assertion_fails_the_build() {
+    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--assert", &policy_file()]);
+    assert_eq!(out.status.code(), Some(1));
+}
+
+/// A ruleset that decides only one subnet, so an assertion pointed at any
+/// other subnet is decided by nothing.
+const NARROW: &str = "table ip filter {\n  chain input {\n    type filter hook input priority filter; policy drop;\n    meta l4proto tcp ip daddr 10.5.0.0/16 tcp dport 502 drop\n    meta l4proto tcp ip daddr 10.5.0.0/16 accept\n  }\n}\n";
+
+/// The requirement: an assertion nothing in the ruleset decides must not read
+/// as a pass. A slipped digit in a zone is how this happens in practice.
+///
+/// Worth noting what this test had to be built to show. In a ruleset carrying a
+/// broad rule -- `iifname "lo" accept`, which nearly every real file has -- a
+/// typo'd zone surfaces as a FAIL instead, because that rule genuinely permits
+/// traffic to the mistyped addresses. Both outcomes are loud, which is what
+/// matters; the silent one is the pass, and that is what this pins.
+#[test]
+fn an_assertion_nothing_decides_is_vacuous_not_passing() {
+    let rules = write_temp("narrow.nft", NARROW);
+    let doc = "[zones]\nvlan_corp = [\"10.1.0.0/16\"]\nvlan_ot = [\"10.50.0.0/16\"]\n\n[[assert]]\nname=\"ot-cell-isolation\"\nkind=\"isolation\"\nfrom=\"vlan_corp\"\nto=\"vlan_ot\"\nproto=\"tcp\"\ndport=502\n";
+    let path = write_temp("typo.policy.toml", doc);
+
+    let out = soteria(&["diff", "--base", &rules, "--head", &rules, "--assert", &path]);
+    let text = stdout(&out);
+
+    assert!(text.contains("VACUOUS"), "a zone nothing decides must not pass:\n{text}");
+    assert!(!text.contains("PASS    ot-cell-isolation"), "{text}");
+    assert!(text.contains("default policy"), "the reason should say why:\n{text}");
+    assert!(text.contains("typo"), "and hint at the likely cause:\n{text}");
+    assert!(text.contains("1 vacuous"), "{text}");
+    // It must fail the build: a green result that establishes nothing is worse
+    // than a red one, because green gets merged.
+    assert_eq!(out.status.code(), Some(1));
+}
+
+/// The corrected zone must produce a real verdict, or the test above could be
+/// satisfied by calling everything vacuous.
+#[test]
+fn the_same_assertion_with_the_right_zone_is_a_real_pass() {
+    let rules = write_temp("narrow.nft", NARROW);
+    let doc = "[zones]\nvlan_corp = [\"10.1.0.0/16\"]\nvlan_ot = [\"10.5.0.0/16\"]\n\n[[assert]]\nname=\"ot-cell-isolation\"\nkind=\"isolation\"\nfrom=\"vlan_corp\"\nto=\"vlan_ot\"\nproto=\"tcp\"\ndport=502\n";
+    let path = write_temp("right.policy.toml", doc);
+
+    let out = soteria(&["diff", "--base", &rules, "--head", &rules, "--assert", &path]);
+    let text = stdout(&out);
+    assert!(text.contains("PASS    ot-cell-isolation"), "{text}");
+    assert!(!text.contains("VACUOUS"), "{text}");
+    assert_eq!(out.status.code(), Some(0));
+}
+
+#[test]
+fn vacuous_can_be_downgraded_deliberately() {
+    let rules = write_temp("narrow.nft", NARROW);
+    let doc = "[zones]\nz = [\"10.50.0.0/16\"]\n\n[[assert]]\nname=\"x\"\nkind=\"isolation\"\nto=\"z\"\nproto=\"tcp\"\ndport=502\n";
+    let path = write_temp("vacuous.policy.toml", doc);
+
+    let strict = soteria(&["diff", "--base", &rules, "--head", &rules, "--assert", &path]);
+    assert_eq!(strict.status.code(), Some(1));
+
+    let lenient = soteria(&[
+        "diff",
+        "--base",
+        &rules,
+        "--head",
+        &rules,
+        "--assert",
+        &path,
+        "--allow-vacuous",
+    ]);
+    assert!(stdout(&lenient).contains("VACUOUS"), "still reported");
+    assert_eq!(lenient.status.code(), Some(0), "but no longer fatal");
+}
+
+/// An interface named only by an assertion still has to get a symbol, or the
+/// assertion resolves to the empty set and is vacuous for the wrong reason.
+#[test]
+fn an_interface_named_only_in_an_assertion_still_resolves() {
+    // wg0 appears in neither ruleset.
+    let doc = "[zones]\nz = [\"10.5.0.0/16\"]\n\n[[assert]]\nname=\"x\"\nkind=\"isolation\"\nto=\"z\"\niif=\"wg0\"\nproto=\"tcp\"\ndport=502\n";
+    let path = write_temp("wg0.policy.toml", doc);
+    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--assert", &path]);
+    let text = stdout(&out);
+    // The rules leave iif unconstrained, so they do decide wg0 traffic: this is
+    // a real result, not "describes no packet".
+    assert!(!text.contains("contradict"), "assertion collapsed to nothing:\n{text}");
+    assert!(text.contains("FAIL") || text.contains("PASS"), "{text}");
+}
+
+#[test]
+fn a_bad_assertion_file_exits_two() {
+    let path = write_temp(
+        "bad.policy.toml",
+        "[[assert]]\nname=\"x\"\nkind=\"isolation\"\nfrom=\"nosuchzone\"\n",
+    );
+    let out = soteria(&["diff", "--base", &base(), "--head", &head(), "--assert", &path]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("no zone named `nosuchzone`"));
+}
+
+/// The attestation has to say what the check did not cover, or it overstates
+/// itself the same way an unqualified PASS would.
+#[test]
+fn the_attestation_carries_the_model_boundaries() {
+    let dest = write_temp("att.json", "");
+    let out = soteria(&[
+        "diff",
+        "--base",
+        &base(),
+        "--head",
+        &head(),
+        "--assert",
+        &policy_file(),
+        "--attest",
+        &dest,
+    ]);
+    assert_eq!(out.status.code(), Some(1), "the failed assertion still fails the build");
+
+    let text = std::fs::read_to_string(&dest).unwrap();
+    assert!(well_formed(&text), "attestation is not well-formed json:\n{text}");
+    for expected in [
+        "https://in-toto.io/Statement/v1",
+        "modelBoundaries",
+        "stateless",
+        "IPv4 only",
+        "doesNotEstablish",
+        "unsigned by design",
+        "\"sha256\"",
+        "ot-cell-isolation",
+        "counterexample",
+    ] {
+        assert!(text.contains(expected), "attestation missing {expected:?}");
+    }
+}
+
+/// The digests must agree with the rest of the world, or the attestation
+/// identifies nothing.
+#[test]
+fn attestation_digests_match_the_files() {
+    let dest = write_temp("att2.json", "");
+    soteria(&["diff", "--base", &base(), "--head", &head(), "--attest", &dest]);
+    let text = std::fs::read_to_string(&dest).unwrap();
+
+    let expected = Command::new("sha256sum").arg(head()).output().expect("sha256sum");
+    let digest =
+        String::from_utf8_lossy(&expected.stdout).split_whitespace().next().unwrap().to_string();
+    assert_eq!(digest.len(), 64);
+    assert!(text.contains(&digest), "attestation digest disagrees with sha256sum");
+}

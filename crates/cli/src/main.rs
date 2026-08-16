@@ -21,7 +21,9 @@
 
 #![forbid(unsafe_code)]
 
+mod attest;
 mod json;
+mod sha256;
 mod source;
 
 use json::Json;
@@ -35,7 +37,9 @@ use soteria_engine::{
     enumerate::EnumOptions,
     render,
 };
-use soteria_ir::{Ruleset, set_to_prefixes, shared_symbols};
+use soteria_ir::{Ruleset, set_to_prefixes};
+use soteria_policy::eval::Mentioned;
+use soteria_policy::{Outcome, Policy, Report};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -56,6 +60,9 @@ DIFF OPTIONS
   --fail-on-newly-blocked
                      exit 1 when traffic lost access. Off by default: most such
                      changes are deliberate and are surfaced, not blocked
+  --assert <file>    TOML assertion file: zones and intent claims
+  --attest <file>    write an unsigned in-toto predicate here, or - for stdout
+  --allow-vacuous    do not fail on assertions that hold trivially
   --verify           run the engine's internal self-checks on every chain
   --max-rows <n>     lines per section before truncating (default 12)
 
@@ -65,7 +72,8 @@ CHECK OPTIONS
 
 EXIT CODES
   0  completed, no gate failed
-  1  a gate failed
+  1  a gate failed: a failed assertion, an assertion that held only trivially,
+     or --fail-on-newly-blocked with traffic lost
   2  could not analyse: bad arguments, unreadable input, unsupported construct
 ";
 
@@ -89,6 +97,9 @@ struct Options {
     fail_on_newly_blocked: bool,
     verify: bool,
     max_rows: usize,
+    assert_file: Option<String>,
+    attest_to: Option<String>,
+    allow_vacuous: bool,
     positional: Vec<String>,
 }
 
@@ -127,6 +138,18 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
                     other => return Err(format!("unknown format `{other}`; use text or json")),
                 }
                 i += 2;
+            }
+            "--assert" => {
+                o.assert_file = Some(value()?);
+                i += 2;
+            }
+            "--attest" => {
+                o.attest_to = Some(value()?);
+                i += 2;
+            }
+            "--allow-vacuous" => {
+                o.allow_vacuous = true;
+                i += 1;
             }
             "--fail-on-newly-blocked" => {
                 o.fail_on_newly_blocked = true;
@@ -191,7 +214,27 @@ fn cmd_diff(o: Options) -> Result<i32, String> {
     let base_rs = parse(&base_src.label, &base_src.text)?;
     let head_rs = parse(&head_src.label, &head_src.text)?;
 
-    let syms = shared_symbols(&base_rs, &head_rs).map_err(|e| e.to_string())?;
+    let policy: Option<Policy> = match &o.assert_file {
+        Some(path) => {
+            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+            Some(soteria_policy::parse::parse(&text).map_err(|e| format!("{path}: {e}"))?)
+        }
+        None => None,
+    };
+
+    // The table spans both revisions *and* the assertion file. An interface
+    // named only by an assertion still has to get an index: "what happens to
+    // traffic arriving on eth7" is a real question even when no rule mentions
+    // eth7, and leaving the name out would resolve it to the empty set and make
+    // the assertion vacuous for the wrong reason.
+    let syms = SymbolTable::from_names(
+        base_rs
+            .interface_names()
+            .chain(head_rs.interface_names())
+            .chain(policy.iter().flat_map(|p| p.interface_names()))
+            .map(str::to_string),
+    )
+    .map_err(|e| e.to_string())?;
     let layout = Layout::new(VarOrder::AddrInterleaved);
 
     // Chains are matched by name across the two revisions. A chain present in
@@ -228,8 +271,53 @@ fn cmd_diff(o: Options) -> Result<i32, String> {
         }
     }
 
+    // Assertions are checked against the head revision: the question is whether
+    // the change being reviewed still satisfies intent, not whether the old one did.
+    let mut assertions: Vec<Report> = Vec::new();
+    if let Some(p) = &policy {
+        let head_models: Vec<ChainModel> =
+            sections.iter().map(|(_, _, hm, _)| hm.clone()).collect();
+        let mentioned = Mentioned::of(&[&base_rs, &head_rs]);
+        assertions = soteria_policy::evaluate(&layout, &syms, p, &head_models, &mentioned)
+            .map_err(|e| e.to_string())?;
+    }
+
     let lost = sections.iter().any(|(_, _, _, d)| !d.newly_blocked.is_false());
-    let exit = if o.fail_on_newly_blocked && lost { 1 } else { 0 };
+    let failed = assertions.iter().any(|a| matches!(a.outcome, Outcome::Fail { .. }));
+    // A vacuous assertion fails by default. It is a green result that
+    // establishes nothing, which is worse than a red one: red gets
+    // investigated, green gets merged.
+    let vacuous =
+        !o.allow_vacuous && assertions.iter().any(|a| matches!(a.outcome, Outcome::Vacuous { .. }));
+    let exit = if failed || vacuous || (o.fail_on_newly_blocked && lost) { 1 } else { 0 };
+
+    if let Some(dest) = &o.attest_to {
+        let inputs = vec![
+            attest::Input {
+                role: "base",
+                label: base_src.label.clone(),
+                text: base_src.text.clone(),
+            },
+            attest::Input {
+                role: "head",
+                label: head_src.label.clone(),
+                text: head_src.text.clone(),
+            },
+        ];
+        let delta = Json::arr(sections.iter().map(|(name, bm, hm, d)| {
+            Json::obj([
+                ("chain", Json::str(name)),
+                ("newlyBlocked", delta_json(&layout, &syms, bm, hm, &d.newly_blocked)),
+                ("newlyAllowed", delta_json(&layout, &syms, bm, hm, &d.newly_allowed)),
+            ])
+        }));
+        let text = attest::statement(&inputs, &assertions, delta, None).render();
+        if dest == "-" {
+            print!("{text}");
+        } else {
+            std::fs::write(dest, &text).map_err(|e| format!("{dest}: {e}"))?;
+        }
+    }
 
     if o.json {
         print!(
@@ -258,6 +346,9 @@ fn cmd_diff(o: Options) -> Result<i32, String> {
         for u in &unmatched {
             println!("\n{u}");
         }
+        if !assertions.is_empty() {
+            print!("\n{}", render_intent(&assertions, &syms));
+        }
         if lost && !o.fail_on_newly_blocked {
             println!(
                 "\nTraffic lost access. This does not block the build; pass \
@@ -268,13 +359,62 @@ fn cmd_diff(o: Options) -> Result<i32, String> {
     Ok(exit)
 }
 
+/// The INTENT section, in the blueprint's shape.
+fn render_intent(reports: &[Report], syms: &SymbolTable) -> String {
+    let mut out = String::from("INTENT\n");
+    let width = reports.iter().map(|r| r.name.len()).max().unwrap_or(0);
+    for r in reports {
+        out.push_str(&format!("  {:<7} {:<width$}  ", r.outcome.label(), r.name));
+        // Wording follows the kind. "no path" is right for isolation and
+        // exactly backwards for reachability, where passing means a path exists.
+        match &r.outcome {
+            Outcome::Pass => match r.kind {
+                soteria_policy::Kind::Isolation => {
+                    out.push_str(&format!("no path {}\n", r.summary))
+                }
+                soteria_policy::Kind::Reachability => {
+                    out.push_str(&format!("all permitted {}\n", r.summary))
+                }
+            },
+            Outcome::Fail { counterexample } => {
+                let verb = match r.kind {
+                    soteria_policy::Kind::Isolation => "permitted",
+                    soteria_policy::Kind::Reachability => "denied",
+                };
+                out.push_str(&format!("{} {verb}\n", counterexample.describe(syms)));
+                out.push_str(&format!(
+                    "  {:<7} {:<width$}  required by assertion {}\n",
+                    "", "", r.name
+                ));
+            }
+            Outcome::Vacuous { reason } => {
+                out.push_str(&format!("{reason}\n"));
+            }
+        }
+    }
+    let failed = reports.iter().filter(|r| matches!(r.outcome, Outcome::Fail { .. })).count();
+    let vacuous = reports.iter().filter(|r| matches!(r.outcome, Outcome::Vacuous { .. })).count();
+    out.push_str(&format!("\n{} assertions checked", reports.len()));
+    if failed > 0 {
+        out.push_str(&format!(", {failed} failed"));
+    }
+    if vacuous > 0 {
+        // Named separately and never folded into the pass count: a vacuous
+        // assertion held trivially and established nothing.
+        out.push_str(&format!(", {vacuous} vacuous"));
+    }
+    out.push_str(".\n");
+    out
+}
+
 // ------------------------------------------------------------------ check
 
 fn cmd_check(o: Options) -> Result<i32, String> {
     let file = o.positional.first().ok_or("check needs a file")?;
     let src = source::load(file, o.path.as_deref())?;
     let rs = parse(&src.label, &src.text)?;
-    let syms = shared_symbols(&rs, &rs).map_err(|e| e.to_string())?;
+    let syms = SymbolTable::from_names(rs.interface_names().map(str::to_string))
+        .map_err(|e| e.to_string())?;
     let layout = Layout::new(VarOrder::AddrInterleaved);
 
     let mut findings = Vec::new();

@@ -76,7 +76,9 @@ jobs:
           ./scripts/syscall-audit.sh \
             target/x86_64-unknown-linux-musl/release/soteria \
             diff --base fixtures/cell-gateway-base.nft \
-                 --head fixtures/cell-gateway-head.nft --format json
+                 --head fixtures/cell-gateway-head.nft \
+                 --assert fixtures/cell-gateway.policy.toml \
+                 --attest /dev/null --format json
 
   kernel-differential:
     runs-on: ubuntu-24.04

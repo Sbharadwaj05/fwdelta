@@ -1,21 +1,16 @@
 [package]
-name = "soteria-cli"
+name = "soteria-policy"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Semantic diff and formal reachability analysis for firewall policy"
-
-[[bin]]
-name = "soteria"
-path = "src/main.rs"
+description = "Intent assertions and zone vocabulary for Soteria"
 
 [dependencies]
 soteria-ir = { workspace = true }
 soteria-engine = { workspace = true }
-soteria-nft = { workspace = true }
-soteria-policy = { workspace = true }
+toml = { workspace = true }
 biodivine-lib-bdd = { workspace = true }
 
 [lints.rust]

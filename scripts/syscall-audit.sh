@@ -39,8 +39,12 @@ strace -f -e trace=%network -o "$TRACE" "$BIN" "$@" >/dev/null 2>&1
 STATUS=$?
 set -e
 
-if [ "$STATUS" -ne 0 ]; then
-    echo "syscall-audit: the binary exited $STATUS; auditing a failed run proves nothing" >&2
+# Exit 0 and 1 both mean the tool ran and reported: 1 is a gate failure such as
+# a failed assertion, which is a normal outcome and still exercises the whole
+# analysis path. Only 2 and above mean it could not do its job, and auditing a
+# run that never got started proves nothing.
+if [ "$STATUS" -gt 1 ]; then
+    echo "syscall-audit: the binary exited $STATUS; auditing a run that failed to start proves nothing" >&2
     exit 2
 fi
 

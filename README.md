@@ -151,7 +151,43 @@ soteria diff --base main --head HEAD --path cell-gateway.nft --format json
 
 # what is dead in a single ruleset
 soteria check cell-gateway.nft
+
+# with intent assertions, and an attestation for the audit trail
+soteria diff --base main --head HEAD --path cell-gateway.nft \
+             --assert policy.toml --attest soteria.intoto.json
 ```
+
+Assertions are TOML, and zones let a claim be written in IEC 62443 vocabulary
+rather than in CIDRs:
+
+```toml
+[zones]
+vlan_corp = ["10.1.0.0/16"]
+vlan_ot   = ["10.5.0.0/16"]
+
+[[assert]]
+name  = "ot-cell-isolation"
+kind  = "isolation"        # or "reachability"
+from  = "vlan_corp"
+to    = "vlan_ot"
+proto = "tcp"
+dport = 502
+```
+
+An assertion has three outcomes, not two. `PASS` and `FAIL` are the obvious
+ones; **`VACUOUS`** means the property held trivially — nothing in the ruleset
+decides the packets the assertion describes, so the check established nothing.
+That is what a slipped digit in a zone produces, and reporting it as a pass
+would be the policy-file version of a parser silently skipping a rule: the build
+stays green and the check meant to catch the problem is the thing that failed.
+Vacuous assertions fail the run by default; `--allow-vacuous` downgrades them.
+
+The attestation is an unsigned in-toto predicate. It carries the ruleset
+digests, the tool version, the assertion results **and the model's boundaries**
+— an auditor reading it can see that the analysis was stateless, IPv4-only, over
+one host's filter table, and what it therefore does not establish. Sign it
+detached with your own tooling: Soteria holds no key material, which is the same
+promise as never connecting to a device.
 
 Exit codes are the whole interface as far as a pipeline is concerned: `0`
 completed with no gate failed, `1` a gate failed, `2` the tool could not

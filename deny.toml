@@ -64,15 +64,7 @@ wildcards = "deny"
 # A build script is arbitrary code executing on the machine that builds an
 # air-gapped artifact. None of the current tree needs one that we have not
 # already looked at, so new ones should be a conscious decision.
-allow-build-scripts = [
-    { name = "libc" },
-    { name = "num-traits" },
-    { name = "num-integer" },
-    { name = "num-bigint" },
-    { name = "proc-macro2" },
-    { name = "serde" },
-    { name = "zerocopy" },
-]
+
 
 # Crates that can open a socket, resolve a name, or speak TLS. Nothing here is
 # a judgement on the crate; they are simply disqualifying for this artifact.
@@ -147,3 +139,18 @@ deny = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+[bans.build]
+# Each of these runs Rust-version detection at build time and nothing else.
+# Reviewed individually; a new entry here should be a conscious decision, since
+# a build script is arbitrary code running on the machine that builds an
+# air-gapped artifact.
+allow-build-scripts = [
+    { name = "libc" },
+    { name = "num-traits" },
+    { name = "num-integer" },
+    { name = "num-bigint" },
+    { name = "serde" },
+    { name = "serde_core" },
+    { name = "zerocopy" },
+]

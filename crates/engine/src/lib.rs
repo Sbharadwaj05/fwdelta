@@ -11,6 +11,7 @@ pub mod accept;
 pub mod diff;
 pub mod enumerate;
 pub mod header;
+pub mod packet;
 pub mod region;
 pub mod render;
 pub mod report;
@@ -21,6 +22,7 @@ pub use enumerate::{
     EnumOptions, Enumeration, FLOW_DIMS, QUANTIFIED_DIMS, enumerate, exact_cardinality, flow_count,
 };
 pub use header::{Layout, VarOrder};
+pub use packet::{Packet, witness};
 pub use region::Region;
 pub use report::{ReportOptions, render_diff};
 

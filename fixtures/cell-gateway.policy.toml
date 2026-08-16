@@ -1,0 +1,25 @@
+# Intent for the cell gateway, in IEC 62443 vocabulary.
+
+[zones]
+vlan_corp = ["10.1.0.0/16"]
+vlan_ot   = ["10.5.0.0/16"]
+mgmt      = ["10.9.0.0/24"]
+
+# The cell network must never accept modbus from the corporate VLAN.
+[[assert]]
+name  = "ot-cell-isolation"
+kind  = "isolation"
+from  = "vlan_corp"
+to    = "vlan_ot"
+proto = "tcp"
+dport = 502
+
+# Engineers must keep ssh to the cell network, or a change locks everyone out.
+[[assert]]
+name  = "mgmt-plane-reachable"
+kind  = "reachability"
+from  = "mgmt"
+to    = "vlan_ot"
+proto = "tcp"
+dport = 22
+iif   = "eth1"
