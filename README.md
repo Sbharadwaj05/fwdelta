@@ -84,6 +84,23 @@ that the device implements nftables faithfully; that the configuration deployed
 is the configuration analysed; that anything is true about NAT, routing, or other
 devices.
 
+### On the air-gap evidence specifically
+
+The two mechanisms above cover different halves and neither is sufficient alone,
+which is worth stating plainly rather than letting the table imply otherwise.
+
+`cargo deny` is static and total over the dependency graph, but it matches crate
+*names*: it cannot tell that a crate opens a socket, and `libc` is FFI to
+everything. `strace` observes what the binary actually did, but only on the code
+paths the audit run reached — a socket call sitting in an unexercised branch
+would not show up.
+
+Together they are a reasonable pair: the denylist catches an unwanted dependency
+at review time, and the audit catches one that slipped through at runtime.
+Neither is a proof that the binary cannot open a socket, and the project does not
+claim one. The strongest available statement is that no known network-capable
+crate is in the graph and no socket syscall occurs on the analysis path.
+
 ## How the claims are checked
 
 Every claim above has a mechanism behind it, and each runs in CI.
@@ -93,7 +110,7 @@ Every claim above has a mechanism behind it, and each runs in CI.
 | The model matches the kernel | `soteria-kerneldiff` loads generated rulesets into an unprivileged network namespace, sends real packets, and reads per-rule counters for the real verdict. Disagreement is a failing test with a reproducible seed. |
 | The harness can actually fail | `--self-test` injects five deliberately broken models and requires every one to be detected. A fault that survives means the dimension it breaks is untested. |
 | Probes exercise every dimension | Coverage is computed from the probes actually sent and printed on every run. A dimension held constant fails the run. |
-| No network access | `deny.toml` bans network-capable crates, and `scripts/syscall-audit.sh` straces the shipped binary and fails on a single socket syscall. |
+| No network access | Two complementary mechanisms, neither of which is a proof alone. `deny.toml` is static: it bans network-capable crates by name across the whole graph, but cannot detect capability by analysis. `scripts/syscall-audit.sh` is dynamic: it straces the binary and fails on a single socket syscall, which establishes that none occurred **on the paths the audit run exercised** — not that none exists in the binary. A socket call in an unreached branch would not appear. See below. |
 | One file, no dependencies | Static musl build, verified statically linked in CI. |
 | No unsafe in first-party code | `#![forbid(unsafe_code)]` at every crate root. |
 | The parser has a boundary | [docs/NFTABLES-SUBSET.md](docs/NFTABLES-SUBSET.md), with a test asserting the cause and position of every rejection. |

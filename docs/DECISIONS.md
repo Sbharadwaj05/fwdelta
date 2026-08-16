@@ -350,3 +350,81 @@ Two conditions on the exception:
 
 The wider point is that a blanket `ignore` list is how a supply-chain policy
 becomes decorative. One ID, one reason, two expiry conditions.
+
+---
+
+## D-08 Assertion file format: TOML, not YAML — ACCEPTED 2026-08-15
+
+Blueprint §08 specifies YAML, on the argument that network engineers read YAML.
+Amended by the maintainer; recorded here with the reasoning and the measurement.
+
+### Hand-written parser: ruled out
+
+A hand-written YAML subset is the cardinal sin of this project applied to the
+policy file. A user writes valid YAML, the subset misreads it, and the assertion
+silently means something other than what they wrote — the same failure class as
+a frontend silently skipping a rule, except that it produces a *green isolation
+check* instead of a loud error. D-03 permits a hand-written parser for nftables
+precisely because that parser rejects everything it does not fully understand;
+a format parser that must accept arbitrary valid input has no equivalent escape.
+
+The distinction worth keeping: hand-writing a *serialiser* for output this
+project defines is fine, because there is no "silently misreads" failure mode
+and the schema is ours. Hand-writing a *parser* for user input is not. The JSON
+writer in the CLI is hand-written on exactly that basis; the assertion reader is
+not.
+
+### TOML over serde_yaml_ng
+
+Measured rather than argued:
+
+| Crate | Transitive crates | Notes |
+|---|---|---|
+| `toml` | 7 | Cargo team; `serde_spanned` gives line/column for free |
+| `serde_yaml_ng` | 9 | a fork of a deprecated crate; pulls `unsafe-libyaml` |
+
+Three reasons, in order of weight:
+
+1. **Longevity.** `serde_yaml` was deprecated by its author and `serde_yaml_ng`
+   is a fork with an uncertain lifespan. `deny.toml` is now a live gate, so
+   dependency longevity is a cost the project actually pays.
+2. **Deterministic typing.** YAML 1.1 implicit typing turns `no` into `false`,
+   `10:30` into a sexagesimal integer, and has a family of similar surprises.
+   Assertion files are full of protocol names, port literals and CIDR strings,
+   which is exactly where that bites. TOML's spec is much smaller and its typing
+   is explicit.
+3. **Diagnostics.** `serde_spanned` means an assertion error can name a line and
+   column, matching the standard the nftables frontend already sets.
+
+The flat property list in §10 maps onto TOML naturally, and the familiarity
+argument costs little for a file with eight fields.
+
+Reconsider if the audience turns out to be Ansible-adjacent enough that YAML is
+genuinely load-bearing.
+
+---
+
+## D-09 Attestation is unsigned; the caller signs it — ACCEPTED 2026-08-15
+
+Blueprint §02 lists a signed report as a 1.0 capability. Soteria emits an
+in-toto predicate and does not sign it. Signing is the caller's business,
+detached, with their own tooling and their own key.
+
+Two reasons, and the second is the stronger one:
+
+- **Zero crypto dependencies.** Signing means `ring` or `ed25519-dalek`. `ring`
+  is already on the `deny.toml` denylist, and pulling either would widen the
+  dependency graph in the one direction the project's deployment story cannot
+  afford.
+- **A tool that promises to touch nothing should never hold a private key.**
+  Section 02 is emphatic that Soteria never connects to a device and never
+  pushes configuration. Key custody is the same category of promise. An offline
+  analyser that reads two text files has no business managing key material, and
+  an operator who has to hand it one has been given a reason to distrust the
+  rest of the claim.
+
+The attestation is therefore a complete, deterministic, machine-readable
+predicate carrying the commit hash, ruleset digests, assertion results and tool
+version — an input to whatever signing the organisation already runs, rather
+than a substitute for it. §02's "signed report" is amended to "attestation,
+signed by the caller".
