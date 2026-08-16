@@ -1,0 +1,98 @@
+name: ci
+
+# Four gates, three of which check a claim the blueprint makes in prose:
+#
+#   correctness    the test suite and the engine's own self-checks
+#   supply-chain   deny.toml, which makes the §03 air-gap claim reviewable
+#   air-gap        a static musl binary, straced, proving no socket syscalls
+#   kernel         the model measured against the thing it models (§07)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  correctness:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --all-targets
+      # The enumerator gate asserts its own output is lossless, and the
+      # benchmark asserts the partition invariant. Both are cheap; running them
+      # here means a regression in either is a failed build, not a surprise the
+      # next time someone happens to run an example.
+      - run: cargo run --release -p soteria-engine --example enumerator_gate
+      - run: cargo run --release -p soteria-engine --example thousand_rules
+
+  supply-chain:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  air-gap:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y strace musl-tools
+
+      - name: Build the shipped artifact
+        run: cargo build --release --target x86_64-unknown-linux-musl --workspace --examples
+
+      # "Copy one file onto an isolated machine and run it" is only true if the
+      # file has no dynamic dependencies.
+      - name: It must be statically linked
+        run: |
+          BIN=target/x86_64-unknown-linux-musl/release/examples/delta_report
+          file "$BIN"
+          file "$BIN" | grep -q 'static' || { echo "not statically linked"; exit 1; }
+
+      # deny.toml bans network-capable crates by name, which is a tripwire and
+      # not a proof. This is the proof.
+      - name: It must issue no network syscalls
+        run: |
+          ./scripts/syscall-audit.sh \
+            target/x86_64-unknown-linux-musl/release/examples/delta_report
+
+  kernel-differential:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y nftables iproute2 socat iputils-ping
+
+      # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor. The
+      # harness deliberately needs no root, so lift the restriction rather than
+      # running it privileged.
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - run: cargo build --release -p soteria-kerneldiff
+
+      # A fault that goes undetected means the harness cannot see the dimension
+      # it breaks, and agreement below would prove nothing.
+      - name: The harness must be able to fail
+        run: ./target/release/soteria-kerneldiff --self-test --rules 30 --packets 30 --rounds 2
+
+      - name: The model must agree with the kernel
+        run: ./target/release/soteria-kerneldiff --rules 50 --packets 120 --rounds 4

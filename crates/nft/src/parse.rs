@@ -143,7 +143,9 @@ impl<'a> Parser<'a> {
             let (line, col) = self.at();
             match self.bump() {
                 Tok::Word(w) if w == "table" => chains.extend(self.table()?),
-                Tok::Word(w) if matches!(w.as_str(), "include" | "define" | "set" | "map" | "element") => {
+                Tok::Word(w)
+                    if matches!(w.as_str(), "include" | "define" | "set" | "map" | "element") =>
+                {
                     return Err(self
                         .err_at(line, col, Cause::Unimplemented, format!("`{w}` is not supported"))
                         .with_hint(
@@ -202,7 +204,9 @@ impl<'a> Parser<'a> {
             let (line, col) = self.at();
             match self.bump() {
                 Tok::Word(w) if w == "chain" => chains.push(self.chain()?),
-                Tok::Word(w) if matches!(w.as_str(), "set" | "map" | "element" | "counter" | "quota") => {
+                Tok::Word(w)
+                    if matches!(w.as_str(), "set" | "map" | "element" | "counter" | "quota") =>
+                {
                     return Err(self
                         .err_at(
                             line,
@@ -433,7 +437,9 @@ impl<'a> Parser<'a> {
                                     Cause::OutOfScope,
                                     format!("`{w}` is not a function of the packet header"),
                                 )
-                                .with_hint("rate is state, and the header space has no room for it"));
+                                .with_hint(
+                                    "rate is state, and the header space has no room for it",
+                                ));
                         }
                         "counter" => self.skip_counter(),
                         "comment" => {
@@ -443,8 +449,12 @@ impl<'a> Parser<'a> {
                             self.bump();
                         }
                         "log" => self.skip_log(),
-                        "accept" => action = Some(self.set_action(action, Action::Accept, kline, kcol)?),
-                        "drop" => action = Some(self.set_action(action, Action::Drop, kline, kcol)?),
+                        "accept" => {
+                            action = Some(self.set_action(action, Action::Accept, kline, kcol)?)
+                        }
+                        "drop" => {
+                            action = Some(self.set_action(action, Action::Drop, kline, kcol)?)
+                        }
                         "reject" => {
                             if self.eat_word("with") {
                                 // `reject with icmp type port-unreachable` and friends.
@@ -520,7 +530,13 @@ impl<'a> Parser<'a> {
             file: self.file.clone(),
             line,
             column,
-            text: self.src.lines().nth(line.saturating_sub(1) as usize).unwrap_or("").trim().to_string(),
+            text: self
+                .src
+                .lines()
+                .nth(line.saturating_sub(1) as usize)
+                .unwrap_or("")
+                .trim()
+                .to_string(),
         };
         Ok((m, action, origin))
     }
@@ -601,7 +617,10 @@ impl<'a> Parser<'a> {
         loop {
             match self.peek().clone() {
                 Tok::Word(w)
-                    if matches!(w.as_str(), "prefix" | "level" | "flags" | "group" | "snaplen" | "queue-threshold") =>
+                    if matches!(
+                        w.as_str(),
+                        "prefix" | "level" | "flags" | "group" | "snaplen" | "queue-threshold"
+                    ) =>
                 {
                     self.bump();
                     if matches!(self.peek(), Tok::Str(_) | Tok::Word(_) | Tok::Num(_)) {
@@ -702,12 +721,10 @@ impl<'a> Parser<'a> {
     /// with the value parsers and not only at the start of a statement.
     fn reject_named_set(&mut self) -> Result<(), ParseError> {
         if *self.peek() == Tok::Sym('@') {
-            return Err(self
-                .err(Cause::Unimplemented, "named sets are not supported")
-                .with_hint(
-                    "a named set is defined elsewhere in the file, which needs a resolution \
+            return Err(self.err(Cause::Unimplemented, "named sets are not supported").with_hint(
+                "a named set is defined elsewhere in the file, which needs a resolution \
                      pass the frontend does not have yet; inline the members",
-                ));
+            ));
         }
         Ok(())
     }

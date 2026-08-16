@@ -24,12 +24,11 @@ fn build(enterprise_prefix_len: u32) -> Chain {
     let mut line = 0u32;
     let mut push = |c: &mut Chain, m: Match, a: Action, text: &str| {
         line += 1;
-        c.push(m, a, Origin {
-            file: "cell-gateway.nft".into(),
-            line,
-            column: 5,
-            text: text.into(),
-        });
+        c.push(
+            m,
+            a,
+            Origin { file: "cell-gateway.nft".into(), line, column: 5, text: text.into() },
+        );
     };
 
     push(&mut c, Match::any().with_iif(IfMatch::one("lo")), Action::Accept, "iifname lo accept");

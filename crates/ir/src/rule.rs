@@ -176,10 +176,7 @@ impl Match {
     /// True when the predicate can never hold, which the frontend should reject
     /// rather than pass on: a rule that matches nothing is almost always a typo.
     pub fn is_unsatisfiable(&self) -> bool {
-        Field::ALL
-            .iter()
-            .filter(|f| !f.is_interface())
-            .any(|&f| self.packet_dim(f).is_empty())
+        Field::ALL.iter().filter(|f| !f.is_interface()).any(|&f| self.packet_dim(f).is_empty())
     }
 
     /// Every interface name the predicate mentions.
@@ -255,10 +252,7 @@ impl Ruleset {
 
     /// Every interface name in the ruleset, for symbol table construction.
     pub fn interface_names(&self) -> impl Iterator<Item = &str> {
-        self.chains
-            .iter()
-            .flat_map(|c| c.rules.iter())
-            .flat_map(|r| r.matches.interface_names())
+        self.chains.iter().flat_map(|c| c.rules.iter()).flat_map(|r| r.matches.interface_names())
     }
 }
 
@@ -277,9 +271,8 @@ mod tests {
 
     #[test]
     fn constraints_intersect_rather_than_replace() {
-        let m = Match::any()
-            .with_range(Field::DstPort, 100, 200)
-            .with_range(Field::DstPort, 150, 300);
+        let m =
+            Match::any().with_range(Field::DstPort, 100, 200).with_range(Field::DstPort, 150, 300);
         assert_eq!(m.packet_dim(Field::DstPort).ranges(), &[(150, 200)]);
     }
 

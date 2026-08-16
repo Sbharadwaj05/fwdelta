@@ -1,0 +1,149 @@
+# Dependency policy.
+#
+# Blueprint section 03 makes a deployment claim: one offline binary that reads
+# two text files, deployable where SaaS tooling cannot go. This file is the
+# mechanism that makes the claim checkable rather than aspirational, and it is
+# committed before the remaining dependencies land so that it acts as a gate
+# rather than a rubber stamp on a tree already accepted.
+#
+# Run: cargo deny check
+#
+# What this file can and cannot do. cargo-deny bans crates by name; it cannot
+# detect network capability by analysis. The denylist below is therefore a
+# tripwire for the crates that would plausibly arrive, not a proof. The proof is
+# `scripts/syscall-audit.sh`, which straces the shipped binary and fails if it
+# issues a single socket syscall. Treat the two as belt and braces: the list
+# catches a dependency at review time, the audit catches it at runtime.
+
+[graph]
+# The shipped artifact is a static musl binary; the policy must hold for it.
+targets = [
+    "x86_64-unknown-linux-musl",
+    "x86_64-unknown-linux-gnu",
+]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # RUSTSEC-2025-0057: fxhash is unmaintained. See D-07 for the full record.
+    #
+    # Short version: this is an "unmaintained" advisory, not a vulnerability.
+    # fxhash is a small non-cryptographic hasher used for the BDD node table
+    # inside biodivine-lib-bdd. There is no safe upgrade because biodivine pins
+    # it, so the only real remedies are to change BDD engine or vendor a patch.
+    #
+    # Changing engine was measured, not assumed: oxidd pulls 45 crates against
+    # biodivine's 14, including proc-macro chains, rayon and crossbeam. For an
+    # artifact whose selling point is a small auditable tree, that trade is
+    # backwards.
+    #
+    # This exception is scoped to one crate ID on purpose. It expires the moment
+    # biodivine moves to rustc-hash, and it is reviewed if the advisory is ever
+    # upgraded from unmaintained to a vulnerability.
+    "RUSTSEC-2025-0057",
+]
+
+[licenses]
+version = 2
+# Apache-2.0 for our own code; the rest is what the current tree carries.
+# Exactly what the current tree carries, and nothing else. A licence listed
+# here that no crate uses is noise; a new dependency under a new licence should
+# have to be added deliberately.
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-2-Clause",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+# A build script is arbitrary code executing on the machine that builds an
+# air-gapped artifact. None of the current tree needs one that we have not
+# already looked at, so new ones should be a conscious decision.
+allow-build-scripts = [
+    { name = "libc" },
+    { name = "num-traits" },
+    { name = "num-integer" },
+    { name = "num-bigint" },
+    { name = "proc-macro2" },
+    { name = "serde" },
+    { name = "zerocopy" },
+]
+
+# Crates that can open a socket, resolve a name, or speak TLS. Nothing here is
+# a judgement on the crate; they are simply disqualifying for this artifact.
+# If one of these becomes genuinely necessary, that is a decision for
+# docs/DECISIONS.md and a revision of the section 03 claim -- not a quiet
+# addition here.
+deny = [
+    # HTTP clients and servers
+    { name = "reqwest" },
+    { name = "hyper" },
+    { name = "hyper-util" },
+    { name = "ureq" },
+    { name = "attohttpc" },
+    { name = "isahc" },
+    { name = "surf" },
+    { name = "curl" },
+    { name = "curl-sys" },
+    { name = "tiny_http" },
+    # async runtimes with network reactors
+    { name = "tokio" },
+    { name = "async-std" },
+    { name = "smol" },
+    { name = "mio" },
+    { name = "polling" },
+    # raw sockets and name resolution
+    { name = "socket2" },
+    { name = "dns-lookup" },
+    { name = "hickory-resolver" },
+    { name = "trust-dns-resolver" },
+    { name = "tungstenite" },
+    # TLS and the crypto stacks that come with it
+    { name = "rustls" },
+    { name = "native-tls" },
+    { name = "openssl" },
+    { name = "openssl-sys" },
+    { name = "ring" },
+    { name = "webpki" },
+    { name = "rustls-webpki" },
+    # process spawning helpers; the shipped binary spawns nothing
+    { name = "duct" },
+    { name = "subprocess" },
+    { name = "command-group" },
+    # telemetry
+    { name = "sentry" },
+    { name = "opentelemetry" },
+]
+
+# Every non-first-party crate in the shipped tree, and why it is acceptable.
+# Kept as a written record because "the tree is small" is not an argument
+# anyone can check six months later.
+#
+#   biodivine-lib-bdd  the BDD engine (blueprint section 08). Pure computation.
+#   fxhash, byteorder  hashing and byte order for the BDD node table.
+#   num-bigint         exact cardinality beyond u128 inside the BDD library.
+#   num-integer        arithmetic support for num-bigint.
+#   num-rational       pulled by biodivine; arithmetic only.
+#   num-traits         numeric trait definitions.
+#   rand, rand_chacha, rand_core, ppv-lite86, zerocopy
+#                      a hard dependency of biodivine-lib-bdd and num-bigint,
+#                      not a feature that can be switched off. Generates random
+#                      BDDs, which this project never calls. Cannot open a
+#                      socket. See the syscall audit for the empirical check.
+#   getrandom, libc, cfg-if
+#                      how rand seeds itself: the getrandom(2) syscall or
+#                      /dev/urandom. Local, not network.
+#
+# The uncomfortable one is `libc`, which is FFI to everything and could in
+# principle reach a socket. That is exactly why the syscall audit exists and
+# why it runs in CI rather than being asserted here.
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

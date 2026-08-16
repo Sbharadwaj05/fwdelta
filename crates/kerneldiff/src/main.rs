@@ -32,6 +32,8 @@
 //! See [`coverage`]. A dimension not varied across probes is untested, and the
 //! harness will report agreement anyway.
 
+#![forbid(unsafe_code)]
+
 mod coverage;
 mod emit;
 
@@ -179,7 +181,10 @@ fn load_ruleset(text: &str) -> Result<(), String> {
         .map_err(|e| format!("write ruleset: {e}"))?;
     let out = child.wait_with_output().map_err(|e| format!("nft: {e}"))?;
     if !out.status.success() {
-        return Err(format!("nft -f rejected the ruleset: {}", String::from_utf8_lossy(&out.stderr)));
+        return Err(format!(
+            "nft -f rejected the ruleset: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
     }
     Ok(())
 }
@@ -352,13 +357,10 @@ fn probe(p: &Packet, chain: &Chain, peer: &Peer) -> Result<Verdict, String> {
                     // reaching for socat: `socat - UDP-DATAGRAM:...` reads EOF
                     // from a closed stdin and exits without sending anything,
                     // and the std socket path here is already known to work.
-                    let exe = std::env::current_exe()
-                        .map_err(|e| format!("locate self: {e}"))?;
+                    let exe = std::env::current_exe().map_err(|e| format!("locate self: {e}"))?;
                     let exe = exe.to_string_lossy().into_owned();
                     let (sp_s, dp_s) = (sp.to_string(), dp.to_string());
-                    helper = Some(peer.spawn(&[
-                        &exe, "--send-udp", &src, &sp_s, &dst, &dp_s,
-                    ])?);
+                    helper = Some(peer.spawn(&[&exe, "--send-udp", &src, &sp_s, &dst, &dp_s])?);
                 }
             }
         }
@@ -617,8 +619,7 @@ impl Fault {
             }
             Fault::IgnorePorts => {
                 for r in &mut c.rules {
-                    r.matches =
-                        r.matches.clone().relax(Field::SrcPort).relax(Field::DstPort);
+                    r.matches = r.matches.clone().relax(Field::SrcPort).relax(Field::DstPort);
                 }
             }
             Fault::RejectPermits => {
@@ -710,12 +711,7 @@ fn setup_loopback() -> Result<(), String> {
     Ok(())
 }
 
-fn run_round(
-    args: &Args,
-    round: usize,
-    peer: &Peer,
-    cov: &mut Coverage,
-) -> Result<usize, String> {
+fn run_round(args: &Args, round: usize, peer: &Peer, cov: &mut Coverage) -> Result<usize, String> {
     let seed = args.seed.wrapping_add(round as u64 * 0x9E37_79B9);
     let chain = generate(args.rules, seed);
 
@@ -802,8 +798,7 @@ fn run_round(
 
 /// Emit the chain, parse it back, and require the IR to survive the trip.
 fn roundtrip(chain: &Chain) -> Result<(), String> {
-    let text = emit::chain_with(TABLE, chain, false)
-        .ok_or("emitter cannot express this chain")?;
+    let text = emit::chain_with(TABLE, chain, false).ok_or("emitter cannot express this chain")?;
     let reparsed = soteria_nft::parse("roundtrip.nft", &text)
         .map_err(|e| format!("frontend rejected emitted nftables:\n{e}\n{text}"))?;
 

@@ -18,8 +18,7 @@ pub mod report;
 pub use accept::{ChainModel, Decider, RuleModel, analyse};
 pub use diff::{Attribution, ChainDiff, Structural, attribute, diff};
 pub use enumerate::{
-    EnumOptions, Enumeration, FLOW_DIMS, QUANTIFIED_DIMS, enumerate, exact_cardinality,
-    flow_count,
+    EnumOptions, Enumeration, FLOW_DIMS, QUANTIFIED_DIMS, enumerate, exact_cardinality, flow_count,
 };
 pub use header::{Layout, VarOrder};
 pub use region::Region;

@@ -108,15 +108,23 @@ fn main() {
 
     // 1. A single host and port behind a source prefix. The commonest delta of
     //    all: one service exposure changed.
-    let one = Flow::new(l).proto(TCP).src(ip(10, 1, 0, 0), 16).dst(ip(10, 0, 5, 14), 32).dport(502).done();
+    let one = Flow::new(l)
+        .proto(TCP)
+        .src(ip(10, 1, 0, 0), 16)
+        .dst(ip(10, 0, 5, 14), 32)
+        .dport(502)
+        .done();
     case(l, "1. single host and port", "tcp from a /16 to one host on one port", &one);
     assert_lossless(l, &one, "case 1");
 
     // 2. A /16 with a /24 punched out of it. This is the shape that a naive
     //    enumerator renders as eight prefixes and a careless one as 65280 hosts.
-    let two = Flow::new(l).proto(TCP).dst(ip(10, 5, 0, 0), 16).dport(443).done().and(
-        &l.prefix(Field::DstAddr, ip(10, 5, 3, 0), 24).not(),
-    );
+    let two = Flow::new(l)
+        .proto(TCP)
+        .dst(ip(10, 5, 0, 0), 16)
+        .dport(443)
+        .done()
+        .and(&l.prefix(Field::DstAddr, ip(10, 5, 3, 0), 24).not());
     case(l, "2. prefix minus a hole", "tcp to a /16 except one /24, on 443", &two);
     assert_lossless(l, &two, "case 2");
 
@@ -130,7 +138,12 @@ fn main() {
                 .or(&l.prefix(Field::SrcAddr, ip(10, 2, 0, 0), 16))
                 .or(&l.prefix(Field::SrcAddr, ip(192, 168, 4, 0), 24)),
         );
-    case(l, "3. port range by source set", "ephemeral range to one host from three source blocks", &three);
+    case(
+        l,
+        "3. port range by source set",
+        "ephemeral range to one host from three source blocks",
+        &three,
+    );
     assert_lossless(l, &three, "case 3");
 
     // 4. A delta spanning several disjoint destinations and both protocols.
@@ -146,7 +159,12 @@ fn main() {
         }
         acc.and(&l.eq(Field::Proto, TCP).or(&l.eq(Field::Proto, UDP)))
     };
-    case(l, "4. several disjoint destinations", "four unrelated services opened from one source block", &four);
+    case(
+        l,
+        "4. several disjoint destinations",
+        "four unrelated services opened from one source block",
+        &four,
+    );
     assert_lossless(l, &four, "case 4");
 
     // 5. The failure mode the gate exists to catch. Built as 1024 separate
@@ -156,14 +174,12 @@ fn main() {
         let mut acc = l.ff();
         for host in 0..=255u64 {
             for port in [80u64, 443, 8080, 8443] {
-                acc = acc.or(
-                    &Flow::new(l)
-                        .proto(TCP)
-                        .src(ip(10, 1, 0, 0), 16)
-                        .dst(ip(10, 5, 7, 0) | host, 32)
-                        .dport(port)
-                        .done(),
-                );
+                acc = acc.or(&Flow::new(l)
+                    .proto(TCP)
+                    .src(ip(10, 1, 0, 0), 16)
+                    .dst(ip(10, 5, 7, 0) | host, 32)
+                    .dport(port)
+                    .done());
             }
         }
         acc

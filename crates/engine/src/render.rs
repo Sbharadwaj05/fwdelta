@@ -330,8 +330,11 @@ mod tests {
 
     #[test]
     fn disjoint_prefixes_list_directly() {
-        let s = IntervalSet::prefix(32, 0x0A01_0000, 16)
-            .union(&IntervalSet::prefix(32, 0x0A02_0000, 16));
+        let s = IntervalSet::prefix(32, 0x0A01_0000, 16).union(&IntervalSet::prefix(
+            32,
+            0x0A02_0000,
+            16,
+        ));
         assert_eq!(addr_set(&s, &Style::default()), "10.1.0.0/16,10.2.0.0/16");
     }
 

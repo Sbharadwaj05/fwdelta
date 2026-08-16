@@ -216,10 +216,7 @@ pub fn range_to_prefixes(bits: u32, lo: u64, hi: u64) -> Vec<(u64, u32)> {
 
 /// Minimal CIDR cover of a whole interval set.
 pub fn set_to_prefixes(set: &IntervalSet) -> Vec<(u64, u32)> {
-    set.ranges()
-        .iter()
-        .flat_map(|&(lo, hi)| range_to_prefixes(set.bits(), lo, hi))
-        .collect()
+    set.ranges().iter().flat_map(|&(lo, hi)| range_to_prefixes(set.bits(), lo, hi)).collect()
 }
 
 #[cfg(test)]

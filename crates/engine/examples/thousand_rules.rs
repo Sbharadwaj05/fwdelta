@@ -73,7 +73,12 @@ fn generate(n: usize, iface_fraction: u64, seed: u64) -> Ruleset {
                     m = m.with_range(Field::DstPort, lo, lo + rng.below(500));
                 }
                 1 => {}
-                _ => m = m.with_value(Field::DstPort, [22u64, 80, 443, 502, 161, 3389][rng.below(6) as usize]),
+                _ => {
+                    m = m.with_value(
+                        Field::DstPort,
+                        [22u64, 80, 443, 502, 161, 3389][rng.below(6) as usize],
+                    )
+                }
             }
         }
 
@@ -127,8 +132,7 @@ fn run(label: &str, order: VarOrder, rs: &Ruleset, syms: &SymbolTable) {
     // Phase breakdown: compiling predicates is unavoidable work, whereas the
     // set-algebra passes are where an optimisation would have to land.
     let t_m = Instant::now();
-    let compiled: Vec<_> =
-        chain.rules.iter().map(|r| layout.match_bdd(&r.matches, syms)).collect();
+    let compiled: Vec<_> = chain.rules.iter().map(|r| layout.match_bdd(&r.matches, syms)).collect();
     let compile = t_m.elapsed();
     std::hint::black_box(&compiled);
 
@@ -210,5 +214,7 @@ fn main() {
         soteria_engine::HEADER_BITS,
         support
     );
-    println!("            unused dimensions contribute no nodes, so the widening is free until used\n");
+    println!(
+        "            unused dimensions contribute no nodes, so the widening is free until used\n"
+    );
 }

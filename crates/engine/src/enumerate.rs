@@ -39,12 +39,7 @@ pub struct EnumOptions {
 
 impl Default for EnumOptions {
     fn default() -> Self {
-        Self {
-            max_cubes: 200_000,
-            mask_expand_cap: 4096,
-            max_regions: 40,
-            merge_passes: 8,
-        }
+        Self { max_cubes: 200_000, mask_expand_cap: 4096, max_regions: 40, merge_passes: 8 }
     }
 }
 
@@ -132,10 +127,7 @@ fn mask_count(bits: u32, mask: u64) -> u128 {
 
 /// Enumerate the packet set as readable rectangles.
 pub fn enumerate(layout: &Layout, set: &Bdd, opts: EnumOptions) -> Enumeration {
-    let mut out = Enumeration {
-        total_packets: exact_cardinality(set),
-        ..Default::default()
-    };
+    let mut out = Enumeration { total_packets: exact_cardinality(set), ..Default::default() };
     if set.is_false() {
         return out;
     }
@@ -150,8 +142,7 @@ pub fn enumerate(layout: &Layout, set: &Bdd, opts: EnumOptions) -> Enumeration {
         }
         out.cubes_visited += 1;
 
-        let mut dims: [Option<IntervalSet>; 7] =
-            [None, None, None, None, None, None, None];
+        let mut dims: [Option<IntervalSet>; 7] = [None, None, None, None, None, None, None];
         let mut cube_packets: u128 = 1;
         let mut usable = true;
 
@@ -318,7 +309,9 @@ mod tests {
         let l = Layout::default();
         let mut b = l.ff();
         for i in 0..20u64 {
-            b = b.or(&l.eq(Field::DstAddr, 0x0A05_0000 | (i * 4099)).and(&l.eq(Field::DstPort, 1000 + i)));
+            b = b.or(&l
+                .eq(Field::DstAddr, 0x0A05_0000 | (i * 4099))
+                .and(&l.eq(Field::DstPort, 1000 + i)));
         }
         let e = enumerate(&l, &b, EnumOptions { max_regions: 5, ..Default::default() });
         assert_eq!(e.regions.len(), 5);
@@ -350,8 +343,7 @@ mod tests {
 /// whichever dimensions happen to be unconstrained in this delta — would make
 /// two runs produce incomparable numbers, which destroys the one thing a count
 /// is for. A number a reviewer cannot calibrate against is worse than none.
-pub const FLOW_DIMS: [Field; 4] =
-    [Field::SrcAddr, Field::DstAddr, Field::DstPort, Field::Proto];
+pub const FLOW_DIMS: [Field; 4] = [Field::SrcAddr, Field::DstAddr, Field::DstPort, Field::Proto];
 
 /// The dimensions a flow count quantifies away.
 pub const QUANTIFIED_DIMS: [Field; 3] = [Field::SrcPort, Field::IfIn, Field::IfOut];
@@ -371,9 +363,7 @@ pub fn flow_count(layout: &Layout, set: &Bdd) -> u128 {
             let v = layout.var(f, b);
             // Existential quantification over one variable is the disjunction of
             // its two cofactors.
-            projected = projected
-                .restrict(&[(v, true)])
-                .or(&projected.restrict(&[(v, false)]));
+            projected = projected.restrict(&[(v, true)]).or(&projected.restrict(&[(v, false)]));
         }
     }
     // The result no longer depends on the quantified variables, so its
@@ -423,9 +413,11 @@ mod projection_tests {
         let l = Layout::default();
         let hosts = l.prefix(Field::DstAddr, 0x0A05_0000, 24);
         let two_ports = l.eq(Field::DstPort, 80).or(&l.eq(Field::DstPort, 443));
-        let set = hosts.and(&two_ports).and(&l.eq(Field::Proto, 6)).and(
-            &l.prefix(Field::SrcAddr, 0x0A01_0000, 24),
-        );
+        let set = hosts.and(&two_ports).and(&l.eq(Field::Proto, 6)).and(&l.prefix(
+            Field::SrcAddr,
+            0x0A01_0000,
+            24,
+        ));
         // 256 sources x 256 destinations x 2 ports x 1 protocol.
         assert_eq!(flow_count(&l, &set), 256 * 256 * 2);
     }

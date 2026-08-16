@@ -51,18 +51,12 @@ fn a_realistic_ruleset_parses_to_the_expected_shape() {
     assert_eq!(c.rules[1].matches.packet_dim(Field::SrcAddr).count(), 1 << 24);
 
     // An interface set, and `tcp dport` pinning the protocol implicitly.
-    assert_eq!(
-        c.rules[2].matches.iif,
-        IfMatch::OneOf(["eth0".into(), "eth1".into()].into())
-    );
+    assert_eq!(c.rules[2].matches.iif, IfMatch::OneOf(["eth0".into(), "eth1".into()].into()));
     assert_eq!(c.rules[2].matches.packet_dim(Field::Proto).ranges(), &[(6, 6)]);
     assert_eq!(c.rules[2].matches.packet_dim(Field::DstPort).ranges(), &[(22, 22)]);
 
     // A port set.
-    assert_eq!(
-        c.rules[3].matches.packet_dim(Field::DstPort).ranges(),
-        &[(443, 443), (8443, 8443)]
-    );
+    assert_eq!(c.rules[3].matches.packet_dim(Field::DstPort).ranges(), &[(443, 443), (8443, 8443)]);
 
     // `reject` is a distinct action that denies like drop.
     assert_eq!(c.rules[5].action, Action::Reject);
@@ -158,11 +152,7 @@ fn structural_constructs_outside_the_subset_are_rejected() {
             "prerouting",
         ),
         ("include \"other.nft\"", Cause::Unimplemented, "include"),
-        (
-            "table ip filter {\n  set allowlist { type ipv4_addr; }\n}",
-            Cause::Unimplemented,
-            "set",
-        ),
+        ("table ip filter {\n  set allowlist { type ipv4_addr; }\n}", Cause::Unimplemented, "set"),
     ];
 
     for (src, want_cause, want_text) in cases {

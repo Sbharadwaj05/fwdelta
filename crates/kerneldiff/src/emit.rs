@@ -75,12 +75,15 @@ pub fn rule(r: &Rule) -> Option<String> {
     };
     let l4 = proto_value.map(proto_keyword).unwrap_or("ip");
     if let Some(v) = proto_value {
-        parts.push(format!("meta l4proto {}", match v {
-            1 => "icmp".to_string(),
-            6 => "tcp".to_string(),
-            17 => "udp".to_string(),
-            other => other.to_string(),
-        }));
+        parts.push(format!(
+            "meta l4proto {}",
+            match v {
+                1 => "icmp".to_string(),
+                6 => "tcp".to_string(),
+                17 => "udp".to_string(),
+                other => other.to_string(),
+            }
+        ));
     }
 
     if let Some(e) = addr_expr("saddr", r.matches.packet_dim(Field::SrcAddr)) {
@@ -127,10 +130,7 @@ pub fn chain_with(table: &str, c: &Chain, sentinel: bool) -> Option<String> {
         _ => "drop",
     };
     let mut out = format!("table ip {table} {{\n  chain {} {{\n", c.name);
-    out.push_str(&format!(
-        "    type filter hook {} priority filter; policy {policy};\n",
-        c.hook
-    ));
+    out.push_str(&format!("    type filter hook {} priority filter; policy {policy};\n", c.hook));
     for r in &c.rules {
         out.push_str(&rule(r)?);
         out.push('\n');

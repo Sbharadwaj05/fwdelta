@@ -87,9 +87,7 @@ fn direction_section(
         let e = enumerate(layout, &cell.set, opts.enumeration);
         let note = dir.note(cell.was, cell.now);
         found.extend(
-            e.regions
-                .iter()
-                .map(|r| (r.count(), render::row(r, &note, syms, &opts.style))),
+            e.regions.iter().map(|r| (r.count(), render::row(r, &note, syms, &opts.style))),
         );
         omitted_regions += e.omitted_regions;
         omitted_packets += e.omitted_packets;
@@ -146,11 +144,7 @@ fn direction_section(
 }
 
 /// Move a column into the section qualifier when every row agrees on it.
-fn hoist(
-    rows: &mut [Row],
-    qualifiers: &mut Vec<String>,
-    field: fn(&mut Row) -> &mut String,
-) {
+fn hoist(rows: &mut [Row], qualifiers: &mut Vec<String>, field: fn(&mut Row) -> &mut String) {
     if rows.len() < 2 {
         return;
     }
@@ -200,10 +194,9 @@ fn structural_section(changes: &[Structural]) -> String {
                 "now redundant".to_string(),
                 "removing it would not change the accept set".to_string(),
             ),
-            Structural::NoLongerRedundant { .. } => (
-                "now load-bearing".to_string(),
-                "it was redundant before this change".to_string(),
-            ),
+            Structural::NoLongerRedundant { .. } => {
+                ("now load-bearing".to_string(), "it was redundant before this change".to_string())
+            }
             Structural::Added { .. } => ("added".to_string(), String::new()),
             Structural::Removed { .. } => ("removed".to_string(), String::new()),
             Structural::Modified { .. } => ("modified".to_string(), String::new()),
@@ -327,7 +320,8 @@ mod tests {
         let text =
             render_diff(&l, &s, &bm, &hm, &d, ("9f2c1ab", "4e81d33"), &ReportOptions::default());
         assert!(
-            text.contains("rule 02  now reachable") && text.contains("previously shadowed by rule 01"),
+            text.contains("rule 02  now reachable")
+                && text.contains("previously shadowed by rule 01"),
             "report was:\n{text}"
         );
     }
@@ -341,10 +335,7 @@ mod tests {
         let d = diff(&bm, &hm);
         let text = render_diff(&l, &s, &bm, &hm, &d, ("a", "b"), &ReportOptions::default());
 
-        let body: Vec<&str> = text
-            .lines()
-            .filter(|line| line.contains("was allowed by"))
-            .collect();
+        let body: Vec<&str> = text.lines().filter(|line| line.contains("was allowed by")).collect();
         assert!(body.len() > 1, "need several rows to hoist anything");
         assert!(text.contains("all entries: "), "report was:\n{text}");
         // Every row carries tcp, so no row should still print it.
@@ -409,8 +400,7 @@ mod tests {
         // Swapped: the head is the broader one, so access is gained.
         let (bm, hm) = (analyse(&l, &s, &head), analyse(&l, &s, &base));
         let d = diff(&bm, &hm);
-        let text =
-            render_diff(&l, &s, &bm, &hm, &d, ("head", "base"), &ReportOptions::default());
+        let text = render_diff(&l, &s, &bm, &hm, &d, ("head", "base"), &ReportOptions::default());
         assert!(text.contains("was denied by"), "report was:\n{text}");
         assert!(text.contains("now allowed by"), "report was:\n{text}");
     }

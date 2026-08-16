@@ -300,3 +300,53 @@ fix, and it is a real algorithmic change to the highest-risk component in the
 project — precisely the thing not to be reworking while the parser is unwritten.
 
 Revisit after 1.0, against real rulesets rather than generated ones.
+
+---
+
+## D-07 fxhash unmaintained (RUSTSEC-2025-0057) — ACCEPTED with a scoped exception 2026-08-15
+
+Found by `cargo deny check` on the first run of the policy, which is the point
+of writing the policy before the remaining dependencies land.
+
+`biodivine-lib-bdd` depends on `fxhash` for its node table. `fxhash` is
+unmaintained as of RUSTSEC-2025-0057, and there is no safe upgrade because the
+dependency is pinned upstream.
+
+### What was considered
+
+**Ignore it.** The advisory is `unmaintained`, not a vulnerability. `fxhash` is a
+small non-cryptographic hasher with no capability that matters here.
+
+**Change BDD engine.** Blueprint §08 names `oxidd` as the alternative. Measured
+rather than assumed:
+
+| Engine | Crates in the tree |
+|---|---|
+| biodivine-lib-bdd | 14 |
+| oxidd | 45 |
+
+`oxidd` brings proc-macro chains (`syn`, `quote`, `proc-macro-error`), `rayon`,
+`crossbeam` and `parking_lot`. For an artifact whose deployment story is a small
+auditable dependency tree, swapping a maintained-but-larger engine in to resolve
+an *unmaintained* advisory on a hashing crate trades the thing being protected
+for the protection.
+
+**Vendor a patch.** Forking `biodivine-lib-bdd` to swap `fxhash` for
+`rustc-hash` is a two-line change, and makes this repository responsible for
+tracking an upstream it does not otherwise carry. Not worth it for an
+unmaintained-status advisory.
+
+### Decision
+
+Ignore, scoped to the single advisory ID, with the reasoning recorded in
+`deny.toml` next to the exception rather than only here.
+
+Two conditions on the exception:
+
+- It expires if `biodivine-lib-bdd` moves to `rustc-hash`, at which point the
+  ignore should be deleted rather than left as decoration.
+- It is reviewed immediately if the advisory is ever upgraded from
+  `unmaintained` to a vulnerability.
+
+The wider point is that a blanket `ignore` list is how a supply-chain policy
+becomes decorative. One ID, one reason, two expiry conditions.

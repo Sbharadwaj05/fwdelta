@@ -282,11 +282,8 @@ pub fn analyse(layout: &Layout, syms: &SymbolTable, chain: &Chain) -> ChainModel
         } else {
             r.effective.and(&suffix).is_false()
         };
-        suffix = if r.action.permits() {
-            r.matched.or(&suffix)
-        } else {
-            r.matched.not().and(&suffix)
-        };
+        suffix =
+            if r.action.permits() { r.matched.or(&suffix) } else { r.matched.not().and(&suffix) };
     }
 
     ChainModel {
@@ -335,7 +332,10 @@ mod tests {
         let c = chain_of(
             Action::Drop,
             vec![
-                (Match::any().with_value(Field::Proto, TCP).with_value(Field::DstPort, 22), Action::Accept),
+                (
+                    Match::any().with_value(Field::Proto, TCP).with_value(Field::DstPort, 22),
+                    Action::Accept,
+                ),
                 (Match::any().with_prefix(Field::DstAddr, 0x0A05_0000, 16), Action::Drop),
             ],
         );
@@ -347,7 +347,10 @@ mod tests {
     #[test]
     fn order_matters_and_the_model_sees_it() {
         let (l, s) = setup();
-        let ssh = (Match::any().with_value(Field::Proto, TCP).with_value(Field::DstPort, 22), Action::Accept);
+        let ssh = (
+            Match::any().with_value(Field::Proto, TCP).with_value(Field::DstPort, 22),
+            Action::Accept,
+        );
         let deny = (Match::any().with_prefix(Field::DstAddr, 0x0A05_0000, 16), Action::Drop);
 
         let permissive = analyse(&l, &s, &chain_of(Action::Drop, vec![ssh.clone(), deny.clone()]));
@@ -517,12 +520,18 @@ mod tests {
         let with_drop = analyse(
             &l,
             &s,
-            &chain_of(Action::Accept, vec![(Match::any().with_value(Field::DstPort, 22), Action::Drop)]),
+            &chain_of(
+                Action::Accept,
+                vec![(Match::any().with_value(Field::DstPort, 22), Action::Drop)],
+            ),
         );
         let with_reject = analyse(
             &l,
             &s,
-            &chain_of(Action::Accept, vec![(Match::any().with_value(Field::DstPort, 22), Action::Reject)]),
+            &chain_of(
+                Action::Accept,
+                vec![(Match::any().with_value(Field::DstPort, 22), Action::Reject)],
+            ),
         );
         assert_eq!(with_drop.accept, with_reject.accept);
     }

@@ -39,20 +39,36 @@ pub struct Attribution {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Structural {
     /// Was reachable, now no packet reaches it.
-    NowUnreachable { number: u32, covered_by: Vec<u32> },
+    NowUnreachable {
+        number: u32,
+        covered_by: Vec<u32>,
+    },
     /// Was dead, now decides packets. The dangerous one: a rule nobody has
     /// looked at in years starts taking effect.
-    NowReachable { number: u32, previously_covered_by: Vec<u32> },
+    NowReachable {
+        number: u32,
+        previously_covered_by: Vec<u32>,
+    },
     /// Still reachable, but removing it would no longer change anything.
-    NowRedundant { number: u32 },
+    NowRedundant {
+        number: u32,
+    },
     /// Was redundant, now load-bearing.
-    NoLongerRedundant { number: u32 },
-    Added { number: u32 },
-    Removed { number: u32 },
+    NoLongerRedundant {
+        number: u32,
+    },
+    Added {
+        number: u32,
+    },
+    Removed {
+        number: u32,
+    },
     /// A rule was edited in place: the predicate or action changed while the
     /// position stayed. Content pairing sees this as a removal and an addition;
     /// reporting it that way is technically true and reads badly.
-    Modified { number: u32 },
+    Modified {
+        number: u32,
+    },
 }
 
 impl Structural {
@@ -173,10 +189,8 @@ fn structural_changes(base: &ChainModel, head: &ChainModel) -> Vec<Structural> {
         };
 
         match (bi.shadowed, hi.shadowed) {
-            (false, true) => out.push(Structural::NowUnreachable {
-                number: h,
-                covered_by: head.explain_shadow(h),
-            }),
+            (false, true) => out
+                .push(Structural::NowUnreachable { number: h, covered_by: head.explain_shadow(h) }),
             (true, false) => out.push(Structural::NowReachable {
                 number: h,
                 previously_covered_by: base.explain_shadow(b),
@@ -210,7 +224,9 @@ fn structural_changes(base: &ChainModel, head: &ChainModel) -> Vec<Structural> {
     }
     out.extend(removed_left.into_iter().map(|number| Structural::Removed { number }));
     out.extend(added_left.into_iter().map(|number| Structural::Added { number }));
-    out.sort_by(|a, b| a.number().cmp(&b.number()).then_with(|| format!("{a:?}").cmp(&format!("{b:?}"))));
+    out.sort_by(|a, b| {
+        a.number().cmp(&b.number()).then_with(|| format!("{a:?}").cmp(&format!("{b:?}")))
+    });
     out
 }
 
@@ -325,10 +341,8 @@ mod tests {
         assert!(d.newly_allowed.is_false());
         assert!(!d.newly_blocked.is_false());
         assert!(
-            d.structural.contains(&Structural::NowReachable {
-                number: 2,
-                previously_covered_by: vec![1]
-            }),
+            d.structural
+                .contains(&Structural::NowReachable { number: 2, previously_covered_by: vec![1] }),
             "structural findings: {:?}",
             d.structural
         );

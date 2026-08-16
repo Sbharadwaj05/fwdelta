@@ -31,13 +31,9 @@ impl Tok {
         match self {
             Tok::Word(w) => format!("`{w}`"),
             Tok::Num(n) => format!("`{n}`"),
-            Tok::Ip(v) => format!(
-                "`{}.{}.{}.{}`",
-                v >> 24,
-                (v >> 16) & 0xff,
-                (v >> 8) & 0xff,
-                v & 0xff
-            ),
+            Tok::Ip(v) => {
+                format!("`{}.{}.{}.{}`", v >> 24, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff)
+            }
             Tok::Str(s) => format!("`\"{s}\"`"),
             Tok::Sym(c) => format!("`{c}`"),
             Tok::Break => "end of statement".to_string(),
@@ -259,7 +255,10 @@ mod tests {
     /// `1024-65535` must not lex as one word, and `veth-b` must not split.
     #[test]
     fn hyphens_separate_ranges_but_live_inside_names() {
-        assert_eq!(toks("1024-65535"), vec![Tok::Num(1024), Tok::Sym('-'), Tok::Num(65535), Tok::Eof]);
+        assert_eq!(
+            toks("1024-65535"),
+            vec![Tok::Num(1024), Tok::Sym('-'), Tok::Num(65535), Tok::Eof]
+        );
         assert_eq!(toks("veth-b"), vec![Tok::Word("veth-b".into()), Tok::Eof]);
     }
 
